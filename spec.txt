@@ -1,0 +1,93 @@
+tpt-soma: System Design Document (SDD)
+Version: 1.0.0
+Status: Draft / Architecture Proposal
+Domain: Clinical Research Informatics, Bioinformatics, Computational Physiology
+Target Audience: Principal Investigators, Bioinformaticians, Translational Researchers
+1. Executive Summary
+tpt-soma is a first-principles, whole-body physiological simulation and research data platform. While modern medicine fragments the body into isolated specialties (endocrinology, oncology, gerontology), human physiology is a deeply coupled, non-linear dynamical system.
+tpt-soma bridges the gap between fragmented clinical data, multi-omics, and continuous sensor data to create mathematically rigorous "Digital Twins" of human physiology. It specifically targets the triad of modern chronic disease—metabolic dysfunction (diabetes), cellular dysregulation (cancer), and systemic decline (longevity/aging)—while providing the foundational architecture to model the whole body as an integrated system.
+2. Core Philosophy & First Principles
+The Body is a Network, Not a Collection of Parts: We do not model organs in isolation. We model the biochemical, neural, and vascular edges between them. Systemic inflammation (e.g., from diabetes) directly alters the tumor microenvironment (cancer) and accelerates epigenetic drift (aging).
+Mathematical Correctness: Biological simulations often fail due to floating-point accumulation errors. tpt-soma utilizes exact rational numbers and fixed-point arithmetic for critical metabolic flux calculations, ensuring deterministic and reproducible results.
+Proof-Native Security: Built on the principles of tpt-archon, the system uses capability-based security. A researcher cannot query a patient's genomic data unless they hold a cryptographically verified capability token for that specific cohort and data class.
+Compute at the Edge of Data: We do not move petabytes of raw sequencing data to the compute layer. We push lightweight, WebAssembly (Wasm) sandboxed compute to the data layer.
+3. The "Whole Body" Conceptual Model: The Ontological Soma Graph (OSG)
+To model the whole body, tpt-soma abandons traditional relational schemas for its core state representation. Instead, it uses the Ontological Soma Graph (OSG).
+Nodes (Entities):
+Macro: Organ Systems, Organs, Tissues.
+Micro: Cell types, specific cell instances (in spatial transcriptomics).
+Molecular: Proteins, metabolites, genes, epigenetic markers.
+Edges (Relationships & Flux):
+Physical: Vascular connections, neural pathways, physical tissue boundaries.
+Biochemical: Ligand-receptor bindings, metabolic pathway reactions, signaling cascades.
+State Vectors: Every node possesses a time-series state vector. For a "Liver Hepatocyte" node, the state vector includes its current transcriptomic profile, intracellular metabolite concentrations, and senescence markers.
+The Systemic Cross-Talk Engine: The OSG allows researchers to run queries like: "Simulate the effect of a 20% reduction in adipose tissue insulin sensitivity (Diabetes) on the systemic circulation of IGF-1, and project the resulting impact on proliferation rates in a simulated breast tissue node (Cancer) over 5 years (Longevity)."
+4. System Architecture
+The architecture is divided into four distinct layers, prioritizing high-performance data ingestion and secure, isolated compute.
+Layer 1: The Ingestion & Normalization Edge (Rust / no_std)
+Function: Ingests raw, messy, real-world data and normalizes it into the OSG.
+Components:
+tpt-soma-ingest: High-throughput, zero-allocation (no_std) parsers for FHIR R5 (clinical), FASTQ/BAM (genomics), and raw binary streams from CGMs (Dexcom/Libre) and wearables.
+tpt-soma-harmonize: Maps disparate local ontologies (e.g., a specific hospital's custom lab codes) to standard ontologies (LOINC, SNOMED, HPO) using deterministic mapping tables and LLM-assisted fuzzy matching (verified by human-in-the-loop).
+Layer 2: The Soma Core (Storage & State)
+A polyglot persistence layer optimized for the specific shapes of biological data.
+The Graph Store (Topology): A high-performance, Rust-native graph database (e.g., custom implementation or heavily optimized ArangoDB) to store the OSG topology and cross-system relationships.
+The Time-Series Store (Trajectories): DuckDB or ClickHouse for high-speed, columnar storage of longitudinal biomarker trajectories (e.g., 10 years of daily HbA1c and continuous glucose data).
+The Object Store (Blobs): S3-compatible storage for raw multi-omics files (scRNA-seq, whole-genome sequencing, spatial transcriptomics images).
+Layer 3: The Simulation & Analytics Engine
+Differential Equation Solvers: Rust-based ODE/PDE solvers for modeling pharmacokinetics/pharmacodynamics (PK/PD) and metabolic flux.
+Multi-Omics Integration: Pipelines built on Nextflow/Nextflow-DSL2 to run standard bioinformatics tools (CellRanger, GATK, Scanpy) in isolated containers.
+Digital Twin Engine: Generates patient-specific computational models by calibrating the baseline OSG against the patient's actual multi-omics and clinical baseline.
+Layer 4: The Researcher Interface
+Web Frontend: React/TypeScript with WebGL (via Three.js or Deck.gl) for 3D rendering of the Soma Graph and spatial transcriptomics.
+Notebook Integration: Deep integration with JupyterLab and RStudio. Researchers write Python/R code that interacts with tpt-soma via a high-performance Arrow/Flight RPC interface, avoiding slow REST API bottlenecks.
+5. Domain Modules
+While the OSG models the whole body, the UI/UX and pre-built analytical pipelines are organized into specialized modules:
+A. tpt-soma-metabolic (Diabetes & Metabolic Health)
+CGM Aggregation: Ingests 5-minute interval glucose data. Calculates advanced metrics: Time in Range (TIR), Time Below Range (TBR), Glycemic Variability (CV), and Mean Amplitude of Glycemic Excursions (MAGE).
+Metabolic Flux Modeling: Calculates HOMA-IR, Matsuda index, and hepatic insulin resistance indices.
+Intervention Simulator: Models the pharmacokinetic impact of GLP-1/GIP agonists, SGLT2 inhibitors, and dietary macronutrient shifts on the systemic glucose-insulin axis.
+B. tpt-soma-onco (Oncology & Tumor Microenvironment)
+Somatic Mutation Tracker: Tracks Variant Allele Frequency (VAF) over time to monitor minimal residual disease (MRD) and clonal evolution.
+TME Deconvolution: Tools to analyze bulk or single-cell RNA-seq to estimate the proportions of immune cells (T-cells, macrophages) within the tumor microenvironment.
+Therapeutic Matching: Maps tumor mutational profiles (e.g., BRCA, EGFR, KRAS) against a continuously updated knowledge graph of targeted therapies and clinical trials.
+C. tpt-soma-aevum (Longevity & Biological Aging)
+Epigenetic Clock Engine: Integrates DNA methylation array data to calculate HorvathAge, GrimAge, PhenoAge, and DunedinPACE (pace of aging).
+Senescence Tracking: Models the accumulation of senescent cells based on proxy biomarkers (e.g., p16INK4a expression, SASP factors like IL-6 and TNF-alpha).
+Intervention Database: A structured knowledge graph of longevity interventions (Rapamycin, Metformin, Acarbose, Senolytics) with effect sizes derived from model organisms (ITP, TAME trial data).
+D. tpt-soma-systemic (The Whole-Body Integrator)
+Cross-Disease Pathway Analysis: Identifies shared molecular pathways between the three domains (e.g., how mTOR hyperactivity drives both insulin resistance and cellular senescence).
+Polypharmacy Interaction Engine: Simulates how a drug prescribed for diabetes (e.g., Metformin) interacts at the cytochrome P450 level with a targeted cancer therapy, predicting systemic toxicity.
+6. Security, Privacy, and Compliance
+Medical research data requires uncompromising security. tpt-soma implements a Zero-Trust, Proof-Native security model.
+Capability-Based Access Control (CBAC): Access is not granted via roles (RBAC), but via unforgeable cryptographic capabilities. A researcher holds a capability like Read(Cohort_X, Genomic_Data). If they don't have the capability, the database literally cannot execute the query.
+Differential Privacy for Cohorts: When researchers export aggregate statistics for a cohort, tpt-soma automatically injects calibrated mathematical noise to ensure no individual patient's data can be reverse-engineered, satisfying strict IRB requirements.
+Immutable Audit Trails: Every data access, query, and pipeline execution is logged in an append-only, cryptographically hashed ledger. This provides mathematical proof of compliance for HIPAA/GDPR audits.
+Data Residency & Sovereignty: The architecture supports "federated compute." If a hospital in New Zealand cannot let data leave its borders, tpt-soma can deploy the compute layer inside their private cloud, sending only the encrypted model weights or aggregate results back to the central researcher.
+7. Technology Stack
+Core Systems & Parsers: Rust (no_std for edge parsers, std for backend services). Guarantees memory safety and zero-cost abstractions.
+Data Formats: Apache Arrow / Parquet for analytical data exchange; Protocol Buffers / FlatBuffers for high-speed serialization.
+Databases: DuckDB (embedded analytics), Neo4j/ArangoDB (Graph), S3 (Object).
+Compute & Sandboxing: WebAssembly (Wasm) via Wasmtime/Wasmer for executing untrusted researcher code safely and at near-native speed.
+Orchestration: Kubernetes for cloud deployment; Nextflow for bioinformatics pipeline orchestration.
+Frontend: React, TypeScript, WebGL (Three.js) for 3D anatomical rendering.
+8. Phased Delivery Roadmap
+Building a whole-body simulator from day one is a recipe for failure. We will use a "wedge" strategy, expanding outward from a highly specific, painful problem.
+Phase 1: The Metabolic Wedge (Months 1-6)
+Focus: tpt-soma-metabolic.
+Deliverable: A highly polished tool that ingests raw CGM data and standard blood panels (HbA1c, lipids, hs-CRP). It calculates advanced glycemic metrics and tracks longitudinal trajectories.
+Goal: Prove the data ingestion pipeline, the time-series storage, and the security model with a small cohort of diabetes researchers.
+Phase 2: The Oncology Expansion (Months 7-12)
+Focus: tpt-soma-onco.
+Deliverable: Ingestion of NGS (Next-Generation Sequencing) data. Build the multi-omics viewer and the TME deconvolution tools.
+Goal: Prove the system can handle massive, sparse genomic datasets and integrate them with the clinical data from Phase 1.
+Phase 3: The Longitudinal Aging Engine (Months 13-18)
+Focus: tpt-soma-aevum.
+Deliverable: Integration of epigenetic clock calculations and the longevity intervention knowledge graph.
+Goal: Enable researchers to correlate the metabolic and oncological data with biological aging markers.
+Phase 4: Whole-Body Systemic Integration (Months 19-24+)
+Focus: tpt-soma-systemic and the full Ontological Soma Graph.
+Deliverable: The 3D whole-body visualization. The cross-talk differential equation solvers. The ability to run systemic "Digital Twin" simulations.
+Goal: Achieve the ultimate vision of tpt-soma—a unified, mathematically correct model of human physiology for translational research.
+9. Conclusion
+tpt-soma is not just another electronic health record or a wrapper around existing bioinformatics tools. It is a foundational, first-principles computational engine for human physiology. By treating the body as an integrated, mathematically verifiable graph, and by enforcing uncompromising security and performance at the code level, tpt-soma will provide researchers with the clarity and computational power required to solve the most complex diseases of our time.

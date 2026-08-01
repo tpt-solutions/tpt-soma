@@ -1,0 +1,35 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!deploy/**/*.example
+
+# Local data volumes
+*.duckdb
+*.duckdb.wal
+data/
+deploy/minio-data/
+deploy/postgres-data/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
