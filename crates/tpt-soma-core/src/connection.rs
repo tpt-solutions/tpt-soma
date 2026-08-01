@@ -1,4 +1,3 @@
-use sqlx::PgPool;
 use sqlx::migrate::{MigrateError, Migrator};
 use thiserror::Error;
 
@@ -13,6 +12,8 @@ pub enum CoreError {
 }
 
 pub type Result<T> = std::result::Result<T, CoreError>;
+
+pub type PgPool = sqlx::PgPool;
 
 pub async fn create_pool(database_url: &str) -> Result<PgPool> {
     let pool = PgPool::connect(database_url).await?;

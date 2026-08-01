@@ -49,9 +49,9 @@ async fn upload_h5ad(
         }
     }
     let path = tmp_path.ok_or_else(|| AppError::MissingField("file".into()))?;
-    let adata = AnnDataParser::new(&path).parse().map_err(|e| AppError::Parse(e.to_string()))?;
+    let result = AnnDataParser::new(&path).parse().map_err(|e| AppError::Parse(e.to_string()))?;
     std::fs::remove_file(&path)?;
-    Ok((StatusCode::OK, format!("{{\"status\":\"ok\",\"cells\":{}}}", adata.obs_count)))
+    Ok((StatusCode::OK, format!("{{\"status\":\"ok\",\"cells\":{}}}", result.n_cells())))
 }
 
 #[derive(Debug, thiserror::Error)]

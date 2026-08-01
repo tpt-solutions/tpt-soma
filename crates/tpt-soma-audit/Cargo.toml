@@ -5,6 +5,10 @@ edition = "2024"
 description = "Append-only hash-chained audit ledger over Keystone"
 authors = ["tpt-soma contributors"]
 
+[[bin]]
+name = "tpt-soma-audit"
+path = "src/bin/audit_cli.rs"
+
 [dependencies]
 tokio = { workspace = true }
 sqlx = { workspace = true }
@@ -17,6 +21,8 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
+clap = { workspace = true }
+tpt-soma-core = { path = "../tpt-soma-core" }
 
 [dev-dependencies]
 tokio-test = "0.4"

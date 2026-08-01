@@ -1,6 +1,6 @@
-pub mod server;
-pub mod flight;
 pub mod auth;
+pub mod error;
+pub mod flight;
+pub mod server;
 
-pub type Error = Box<dyn std::error::Error + Send + Sync>;
-pub type Result<T> = std::result::Result<T, Error>;
+pub use error::{ApiError, Result};

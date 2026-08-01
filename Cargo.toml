@@ -28,7 +28,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
 chrono = { version = "0.4", features = ["serde"] }
-ed25519-dalek = { version = "2.1", features = ["serde"] }
+ed25519-dalek = { version = "2.2", features = ["serde"] }
 hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.22"
@@ -36,7 +36,7 @@ rand = "0.8"
 arrow = { version = "59", features = ["prettyprint"] }
 arrow-flight = { version = "59" }
 arrow-schema = "59"
-tonic = { version = "0.12", features = ["tls", "transport"] }
+tonic = { version = "0.14", features = ["tls-native-roots", "transport"] }
 prost = "0.13"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 bytes = "1.9"
@@ -48,3 +48,5 @@ noodles = { version = "0.114" }
 anndata = "0.7"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors"] }
+clap = { version = "4.6", features = ["derive", "env"] }
+hex = "0.4"

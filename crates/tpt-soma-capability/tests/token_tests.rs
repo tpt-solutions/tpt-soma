@@ -1,13 +1,13 @@
 use tpt_soma_capability::{
-    token::{CapabilityToken, Payload},
-    attenuation::AttenuatedToken,
+    token::CapabilityToken,
     registry::DataClassRegistry,
     revocation::RevocationList,
 };
-use ed25519_dalek::{SigningKey, VerifyingKey, keypair::Keypair};
+use ed25519_dalek::{SigningKey, VerifyingKey};
 
-fn generate_keypair() -> (SigningKey, VerifyingKey) {
-    let signing = SigningKey::generate(&mut rand::thread_rng());
+fn deterministic_keypair() -> (SigningKey, VerifyingKey) {
+    let bytes = [0x42u8; 32];
+    let signing = SigningKey::from_bytes(&bytes);
     let verifying = signing.verifying_key();
     (signing, verifying)
 }
@@ -26,7 +26,7 @@ fn make_token() -> CapabilityToken {
 
 #[test]
 fn forged_signature_rejected() {
-    let (_sk, vk) = generate_keypair();
+    let (_sk, vk) = deterministic_keypair();
     let mut token = make_token();
     token.signature = vec![0u8; 64];
     assert!(!token.verify(&vk));
@@ -34,17 +34,18 @@ fn forged_signature_rejected() {
 
 #[test]
 fn expired_token_rejected() {
-    let (_sk, vk) = generate_keypair();
+    let (_sk, _vk) = deterministic_keypair();
     let mut token = make_token();
     token.expiry = 1;
-    token.signature = vec![0u8; 64];
     assert!(token.is_expired());
 }
 
 #[test]
 fn attenuated_token_cannot_exceed_parent() {
-    let _ = DataClassRegistry::default();
-    let _ = RevocationList::new();
+    let mut registry = DataClassRegistry::default();
+    registry.seed_phase0();
+    let class = registry.get("genomic_variant");
+    assert!(class.is_some());
 }
 
 #[test]

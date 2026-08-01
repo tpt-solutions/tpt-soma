@@ -16,6 +16,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
 md5 = { workspace = true }
+rand = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

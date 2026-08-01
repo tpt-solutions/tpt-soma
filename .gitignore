@@ -2,6 +2,7 @@
 target/
 **/*.rs.bk
 *.pdb
+Cargo.lock
 
 # Node / frontend
 node_modules/
@@ -24,6 +25,7 @@ build/
 data/
 deploy/minio-data/
 deploy/postgres-data/
+tpt-data/
 
 # Editor / OS
 .vscode/

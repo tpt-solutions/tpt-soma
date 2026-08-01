@@ -19,11 +19,27 @@ tracing-subscriber = { workspace = true }
 prometheus = { workspace = true }
 uuid = { workspace = true }
 axum = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
+ed25519-dalek = { workspace = true }
+chrono = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio-stream = "0.1"
+tower = { workspace = true }
+tower-http = { workspace = true }
+bytes = { workspace = true }
+sqlx = { workspace = true }
 tpt-soma-core = { path = "../tpt-soma-core" }
 tpt-soma-capability = { path = "../tpt-soma-capability" }
 tpt-soma-audit = { path = "../tpt-soma-audit" }
 tpt-soma-genomica = { path = "../tpt-soma-genomica" }
 tpt-soma-cytos = { path = "../tpt-soma-cytos" }
+tpt-soma-ingest = { path = "../tpt-soma-ingest" }
 
 [dev-dependencies]
 tokio-test = "0.4"
+
+[[bin]]
+name = "tpt-soma-admin"
+path = "bin/admin.rs"

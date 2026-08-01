@@ -2,8 +2,9 @@ use sqlx::PgPool;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
+use sha2::{Digest, Sha256};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct AuditEvent {
     pub id: Uuid,
     pub actor: String,
@@ -18,7 +19,7 @@ pub struct AuditEvent {
 }
 
 pub struct AuditLedger {
-    pool: PgPool,
+    pub pool: PgPool,
 }
 
 impl AuditLedger {
@@ -26,7 +27,29 @@ impl AuditLedger {
         Self { pool }
     }
 
-    pub async fn append(&self, event: AuditEvent) -> Result<(), AuditError> {
+    pub async fn append(&self, mut event: AuditEvent) -> Result<(), AuditError> {
+        // Get the previous row hash
+        let prev_hash = self.tail_hash().await?;
+        event.prev_row_hash = prev_hash.clone();
+
+        // Compute the row hash
+        let mut hasher = Sha256::new();
+        if let Some(prev) = &prev_hash {
+            hasher.update(prev.as_bytes());
+        }
+        let payload = serde_json::json!({
+            "id": event.id,
+            "actor": event.actor,
+            "resource_class": event.resource_class,
+            "action": event.action,
+            "cohort_scope": event.cohort_scope,
+            "timestamp": event.timestamp,
+            "query_fingerprint": event.query_fingerprint,
+            "outcome": event.outcome,
+        });
+        hasher.update(serde_json::to_vec(&payload).unwrap());
+        event.row_hash = format!("{:x}", hasher.finalize());
+
         sqlx::query(
             r#"
             INSERT INTO audit_ledger
@@ -58,10 +81,16 @@ impl AuditLedger {
         .await?;
         Ok(row.flatten())
     }
+
+    pub async fn verify_chain(&self) -> Result<crate::integrity::ChainReport, crate::integrity::IntegrityError> {
+        crate::integrity::verify_chain(self).await
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuditError {
     #[error("database error: {0}")]
     Database(#[from] sqlx::Error),
+    #[error("serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
 }

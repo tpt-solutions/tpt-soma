@@ -5,6 +5,10 @@ edition = "2024"
 description = "Custom Ed25519-signed capability tokens with HMAC-chained caveats"
 authors = ["tpt-soma contributors"]
 
+[[bin]]
+name = "tpt-soma-capability"
+path = "src/bin/issue_token.rs"
+
 [dependencies]
 tokio = { workspace = true }
 ed25519-dalek = { workspace = true }
@@ -17,6 +21,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 chrono = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
