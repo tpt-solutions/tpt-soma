@@ -1,0 +1,47 @@
+name: tpt-soma
+
+services:
+  keystone:
+    ports:
+      - "5432:5432"
+      - "5435:5435"
+      - "9187:9187"
+    volumes:
+      - type: bind
+        source: ./tpt-data
+        target: /var/lib/keystone/tpt-data
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - type: bind
+        source: ./minio-data
+        target: /data
+    environment:
+      - MINIO_DEBUG=1
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    ports:
+      - "8080:8080"
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+    volumes:
+      - type: bind
+        source: ../crates/tpt-soma-capability/dev-keys
+        target: /run/secrets
+
+  frontend:
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8080
+      - NODE_ENV=development

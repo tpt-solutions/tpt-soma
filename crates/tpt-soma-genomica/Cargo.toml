@@ -1,0 +1,24 @@
+[package]
+name = "tpt-soma-genomica"
+version = "0.1.0"
+edition = "2024"
+description = "Variant harmonization, annotation, and genomics domain logic"
+authors = ["tpt-soma contributors"]
+
+[dependencies]
+tokio = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tpt-soma-core = { path = "../tpt-soma-core" }
+tpt-soma-capability = { path = "../tpt-soma-capability" }
+tpt-soma-audit = { path = "../tpt-soma-audit" }
+tpt-soma-ingest = { path = "../tpt-soma-ingest" }
+tpt-soma-harmonize = { path = "../tpt-soma-harmonize" }
+
+[dev-dependencies]
+tokio-test = "0.4"

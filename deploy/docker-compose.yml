@@ -1,0 +1,76 @@
+name: tpt-soma
+
+services:
+  keystone:
+    image: ghcr.io/tpt-keystone-db/tpt-keystone:latest
+    container_name: tpt-soma-keystone
+    ports:
+      - "5432:5432"
+      - "5435:5435"
+      - "9187:9187"
+    volumes:
+      - tpt-data:/var/lib/keystone/tpt-data
+    environment:
+      - TPT_AUTH_BOOTSTRAP_USER=${TPT_AUTH_BOOTSTRAP_USER:-admin}
+      - TPT_AUTH_BOOTSTRAP_PASSWORD=${TPT_AUTH_BOOTSTRAP_PASSWORD}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${TPT_AUTH_BOOTSTRAP_USER:-admin}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: tpt-soma-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    container_name: tpt-soma-api
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://${TPT_AUTH_BOOTSTRAP_USER:-admin}:${POSTGRES_PASSWORD:-postgres}@keystone:5432/tpt_soma
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - MINIO_BUCKET=raw-omics
+      - CAPABILITY_ROOT_KEY_PATH=/run/secrets/capability_root_key
+    depends_on:
+      keystone:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - capability-secrets:/run/secrets
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: tpt-soma-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8080
+
+volumes:
+  tpt-data:
+  minio-data:
+  capability-secrets:

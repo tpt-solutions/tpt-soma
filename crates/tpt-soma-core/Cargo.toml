@@ -1,0 +1,21 @@
+[package]
+name = "tpt-soma-core"
+version = "0.1.0"
+edition = "2024"
+description = "Keystone data-access layer: connection pooling, schema migrations, query helpers"
+authors = ["tpt-soma contributors"]
+
+[dependencies]
+tokio = { workspace = true }
+sqlx = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+md5 = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"

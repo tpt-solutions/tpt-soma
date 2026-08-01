@@ -1,0 +1,15 @@
+{{- if .Values.keystone.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "tpt-soma.fullname" . }}-keystone-pvc
+  labels:
+    {{- include "tpt-soma.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keystone
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.keystone.persistence.size }}
+{{- end }}

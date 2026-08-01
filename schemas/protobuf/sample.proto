@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package tpt_soma.sample.v1;
+
+message Sample {
+  string sample_id = 1;
+  string patient_id = 2;
+  string source = 3;
+  string dataset_provenance = 4;
+}
+
+message Cohort {
+  string cohort_id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+message CohortMembership {
+  string cohort_id = 1;
+  string sample_id = 2;
+}

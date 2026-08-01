@@ -1,0 +1,16 @@
+[package]
+name = "tpt-soma-harmonize"
+version = "0.1.0"
+edition = "2024"
+description = "Deterministic ontology mapping tables + human-in-the-loop review"
+authors = ["tpt-soma contributors"]
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"

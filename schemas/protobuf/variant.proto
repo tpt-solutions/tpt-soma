@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package tpt_soma.variant.v1;
+
+message Variant {
+  string variant_id = 1;
+  string chromosome = 2;
+  int32 position = 3;
+  string reference = 4;
+  string alternate = 5;
+  string rsid = 6;
+}

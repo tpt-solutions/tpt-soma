@@ -1,0 +1,60 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+keystone:
+  enabled: true
+  image:
+    repository: ghcr.io/tpt-keystone-db/tpt-keystone
+    tag: latest
+  ports:
+    postgres: 5432
+    http: 5435
+    metrics: 9187
+  auth:
+    bootstrapUser: admin
+    bootstrapPassword: changeme
+  persistence:
+    enabled: true
+    size: 50Gi
+
+minio:
+  enabled: true
+  image:
+    repository: minio/minio
+    tag: latest
+  ports:
+    api: 9000
+    console: 9001
+  rootUser: minioadmin
+  rootPassword: minioadmin
+  buckets:
+    - name: raw-omics
+    - name: processed
+  persistence:
+    enabled: true
+    size: 100Gi
+
+api:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: tpt-soma-api
+    tag: latest
+  ports:
+    http: 8080
+  env:
+    databaseUrl: "postgres://admin:changeme@keystone:5432/tpt_soma"
+    minioEndpoint: "minio:9000"
+    minioBucket: "raw-omics"
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: tpt-soma-frontend
+    tag: latest
+  ports:
+    http: 80
+  env:
+    apiUrl: "http://localhost:8080"

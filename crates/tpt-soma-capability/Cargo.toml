@@ -1,0 +1,22 @@
+[package]
+name = "tpt-soma-capability"
+version = "0.1.0"
+edition = "2024"
+description = "Custom Ed25519-signed capability tokens with HMAC-chained caveats"
+authors = ["tpt-soma contributors"]
+
+[dependencies]
+tokio = { workspace = true }
+ed25519-dalek = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"

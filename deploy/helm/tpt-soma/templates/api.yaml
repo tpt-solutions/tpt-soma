@@ -1,0 +1,50 @@
+{{- if .Values.api.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tpt-soma.fullname" . }}-api
+  labels:
+    {{- include "tpt-soma.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "tpt-soma.name" . }}
+      app.kubernetes.io/component: api
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "tpt-soma.name" . }}
+        app.kubernetes.io/component: api
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "tpt-soma.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.ports.http }}
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              value: {{ .Values.api.env.databaseUrl | quote }}
+            - name: MINIO_ENDPOINT
+              value: {{ .Values.api.env.minioEndpoint | quote }}
+            - name: MINIO_BUCKET
+              value: {{ .Values.api.env.minioBucket | quote }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+{{- end }}

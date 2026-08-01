@@ -1,0 +1,29 @@
+[package]
+name = "tpt-soma-api"
+version = "0.1.0"
+edition = "2024"
+description = "Arrow Flight RPC service, HTTP API, and frontend integration"
+authors = ["tpt-soma contributors"]
+
+[dependencies]
+tokio = { workspace = true }
+tonic = { workspace = true }
+arrow = { workspace = true }
+arrow-flight = { workspace = true }
+arrow-schema = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+prometheus = { workspace = true }
+uuid = { workspace = true }
+axum = { workspace = true }
+tpt-soma-core = { path = "../tpt-soma-core" }
+tpt-soma-capability = { path = "../tpt-soma-capability" }
+tpt-soma-audit = { path = "../tpt-soma-audit" }
+tpt-soma-genomica = { path = "../tpt-soma-genomica" }
+tpt-soma-cytos = { path = "../tpt-soma-cytos" }
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -1,0 +1,15 @@
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "tpt-soma.fullname" . }}-minio-pvc
+  labels:
+    {{- include "tpt-soma.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.minio.persistence.size }}
+{{- end }}

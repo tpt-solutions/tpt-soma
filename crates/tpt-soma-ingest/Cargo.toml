@@ -1,0 +1,25 @@
+[package]
+name = "tpt-soma-ingest"
+version = "0.1.0"
+edition = "2024"
+description = "Source-agnostic ingestion parsers (VCF, AnnData, FHIR, CGM)"
+authors = ["tpt-soma contributors"]
+
+[dependencies]
+tokio = { workspace = true }
+reqwest = { workspace = true }
+bytes = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+noodles = { workspace = true }
+anndata = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
