@@ -1,8 +1,5 @@
 use clap::{Parser, Subcommand};
-use tpt_soma_capability::{
-    token::CapabilityToken,
-    registry::DataClassRegistry,
-};
+use tpt_soma_capability::{registry::DataClassRegistry, token::CapabilityToken};
 
 #[derive(Parser)]
 #[command(name = "tpt-soma-admin")]
@@ -33,7 +30,12 @@ enum Commands {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Issue { subject, resource, action, cohort } => {
+        Commands::Issue {
+            subject,
+            resource,
+            action,
+            cohort,
+        } => {
             let _reg = DataClassRegistry::default();
             let token = CapabilityToken {
                 subject,

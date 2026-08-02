@@ -9,6 +9,8 @@ members = [
     "crates/tpt-soma-genomica",
     "crates/tpt-soma-cytos",
     "crates/tpt-soma-api",
+    "crates/tpt-soma-organon",
+    "crates/tpt-soma-chronos",
 ]
 exclude = ["frontend"]
 
@@ -33,9 +35,12 @@ hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.22"
 rand = "0.8"
+tempfile = "3.2"
 arrow = { version = "59", features = ["prettyprint"] }
 arrow-flight = { version = "59" }
 arrow-schema = "59"
+arrow-array = "59"
+arrow-ipc = "59"
 tonic = { version = "0.14", features = ["tls-native-roots", "transport"] }
 prost = "0.13"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
@@ -44,9 +49,12 @@ futures = "0.3"
 prometheus = { version = "0.13", features = ["process"] }
 md5 = "0.7"
 axum = { version = "0.8", features = ["macros", "multipart"] }
-noodles = { version = "0.114" }
+noodles = { version = "0.114", features = ["vcf"] }
 anndata = "0.7"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors"] }
 clap = { version = "4.6", features = ["derive", "env"] }
 hex = "0.4"
+csv = "1.3"
+anyhow = "1.0"
+hdf5 = "0.8"

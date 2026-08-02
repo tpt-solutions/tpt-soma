@@ -45,6 +45,7 @@ services:
     container_name: tpt-soma-api
     ports:
       - "8080:8080"
+      - "8815:8815"
     environment:
       - DATABASE_URL=postgres://${TPT_AUTH_BOOTSTRAP_USER:-admin}:${POSTGRES_PASSWORD:-postgres}@keystone:5432/tpt_soma
       - MINIO_ENDPOINT=minio:9000
@@ -52,6 +53,7 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - MINIO_BUCKET=raw-omics
       - CAPABILITY_ROOT_KEY_PATH=/run/secrets/capability_root_key
+      - FLIGHT_LISTEN_ADDR=0.0.0.0:8815
     depends_on:
       keystone:
         condition: service_healthy
@@ -69,6 +71,21 @@ services:
       - "3000:80"
     environment:
       - VITE_API_URL=http://localhost:8080
+
+  flight:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    container_name: tpt-soma-flight
+    command: ["tpt-soma-flight"]
+    ports:
+      - "8815:8815"
+    environment:
+      - DATABASE_URL=postgres://${TPT_AUTH_BOOTSTRAP_USER:-admin}:${POSTGRES_PASSWORD:-postgres}@keystone:5432/tpt_soma
+      - FLIGHT_LISTEN_ADDR=0.0.0.0:8815
+    depends_on:
+      keystone:
+        condition: service_healthy
 
 volumes:
   tpt-data:

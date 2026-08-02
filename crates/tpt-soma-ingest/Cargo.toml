@@ -20,6 +20,20 @@ tower = { workspace = true }
 tower-http = { workspace = true }
 noodles = { workspace = true }
 anndata = { workspace = true }
+hdf5-reader = "0.9"
+tpt-soma-core = { path = "../tpt-soma-core" }
+md5 = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
+tempfile = { workspace = true }
+tpt-soma-harmonize = { path = "../tpt-soma-harmonize" }
+tpt-soma-genomica = { path = "../tpt-soma-genomica" }
+tpt-soma-core = { path = "../tpt-soma-core" }
+tpt-soma-audit = { path = "../tpt-soma-audit" }
+tpt-soma-capability = { path = "../tpt-soma-capability" }
+sqlx = { workspace = true }
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

@@ -35,10 +35,26 @@ impl DataClassRegistry {
 
     pub fn seed_phase0(&mut self) {
         let seeds = [
-            ("genomic_raw", "Raw sequencing reads", Sensitivity::Restricted),
-            ("genomic_variant", "Variant calls (VCF)", Sensitivity::Confidential),
-            ("transcriptomic_scrna", "Single-cell RNA-seq", Sensitivity::Confidential),
-            ("phi_demographic", "PHI demographic data", Sensitivity::Restricted),
+            (
+                "genomic_raw",
+                "Raw sequencing reads",
+                Sensitivity::Restricted,
+            ),
+            (
+                "genomic_variant",
+                "Variant calls (VCF)",
+                Sensitivity::Confidential,
+            ),
+            (
+                "transcriptomic_scrna",
+                "Single-cell RNA-seq",
+                Sensitivity::Confidential,
+            ),
+            (
+                "phi_demographic",
+                "PHI demographic data",
+                Sensitivity::Restricted,
+            ),
         ];
         for (id, desc, sens) in seeds {
             self.register(DataClass {

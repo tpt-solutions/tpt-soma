@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import UmapViewer from './UmapViewer';
 
 interface Sample {
   sample_id: string;
@@ -294,104 +295,6 @@ function VariantTable({ variants, loading }: { variants: Variant[]; loading: boo
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function UmapViewer({
-  data,
-  clusters,
-  selectedCluster,
-  onClusterChange,
-  loading,
-}: {
-  data: UmapPoint[];
-  clusters: string[];
-  selectedCluster: string;
-  onClusterChange: (cluster: string) => void;
-  loading: boolean;
-}) {
-  if (loading) return <div className="loading">Loading UMAP...</div>;
-  if (data.length === 0) return <p>No UMAP data for this sample.</p>;
-
-  // Simple canvas-based scatter plot
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const width = canvas.width = canvas.clientWidth;
-    const height = canvas.height = canvas.clientHeight;
-    const padding = 40;
-
-    // Find bounds
-    const xValues = data.map(d => d.umap1);
-    const yValues = data.map(d => d.umap2);
-    const xMin = Math.min(...xValues);
-    const xMax = Math.max(...xValues);
-    const yMin = Math.min(...yValues);
-    const yMax = Math.max(...yValues);
-
-    const xScale = (width - 2 * padding) / (xMax - xMin || 1);
-    const yScale = (height - 2 * padding) / (yMax - yMin || 1);
-
-    // Color map for clusters
-    const colors: Record<string, string> = {};
-    const colorPalette = [
-      '#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00',
-      '#ffff33', '#a65628', '#f781bf', '#999999', '#66c2a5'
-    ];
-    clusters.forEach((c, i) => {
-      colors[c] = colorPalette[i % colorPalette.length];
-    });
-
-    ctx.clearRect(0, 0, width, height);
-
-    // Draw axes
-    ctx.strokeStyle = '#ddd';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(padding, padding);
-    ctx.lineTo(padding, height - padding);
-    ctx.lineTo(width - padding, height - padding);
-    ctx.stroke();
-
-    // Draw points
-    data.forEach(d => {
-      const x = padding + (d.umap1 - xMin) * xScale;
-      const y = height - padding - (d.umap2 - yMin) * yScale;
-      ctx.fillStyle = colors[d.cluster] || '#333';
-      ctx.beginPath();
-      ctx.arc(x, y, 3, 0, 2 * Math.PI);
-      ctx.fill();
-    });
-  }, [data, clusters]);
-
-  return (
-    <div className="umap-viewer">
-      <div className="controls">
-        <label>
-          Filter by cluster:
-          <select value={selectedCluster} onChange={(e) => onClusterChange(e.target.value)}>
-            <option value="">All clusters</option>
-            {clusters.map(c => (
-              <option key={c} value={c}>Cluster {c}</option>
-            ))}
-          </select>
-        </label>
-        <span>{data.length} cells</span>
-      </div>
-      <canvas ref={canvasRef} className="umap-canvas" />
-      <div className="legend">
-        {clusters.map(c => (
-          <span key={c} className="legend-item" style={{ borderColor: `hsl(${parseInt(c) * 36}, 70%, 50%)` }}>
-            Cluster {c}
-          </span>
-        ))}
-      </div>
     </div>
   );
 }

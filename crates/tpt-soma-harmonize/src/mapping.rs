@@ -1,8 +1,10 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MappingTable {
-    mappings: HashMap<String, String>,
+    #[serde(flatten)]
+    pub mappings: HashMap<String, String>,
 }
 
 impl MappingTable {
@@ -20,5 +22,13 @@ impl MappingTable {
 
     pub fn len(&self) -> usize {
         self.mappings.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.mappings.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
+        self.mappings.iter()
     }
 }

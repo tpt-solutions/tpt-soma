@@ -1,4 +1,5 @@
-use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer, Verifier};
+use crate::signing::SigningBackend;
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -14,7 +15,7 @@ pub struct CapabilityToken {
 }
 
 impl CapabilityToken {
-    pub fn sign(signing_key: &SigningKey, mut token: Self) -> Self {
+    pub fn sign<S: SigningBackend>(signing_backend: &S, mut token: Self) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -29,8 +30,8 @@ impl CapabilityToken {
             nonce: token.nonce.clone(),
         };
         let payload_bytes = serde_json::to_vec(&payload).expect("serialize");
-        let signature = signing_key.sign(&payload_bytes);
-        token.signature = signature.to_bytes().to_vec();
+        let signature = signing_backend.sign(&payload_bytes).expect("sign");
+        token.signature = signature;
         token
     }
 
@@ -41,7 +42,9 @@ impl CapabilityToken {
         let Ok(sig) = Signature::from_slice(&self.signature) else {
             return false;
         };
-        verifying_key.verify(&serde_json::to_vec(&payload).expect("serialize"), &sig).is_ok()
+        verifying_key
+            .verify(&serde_json::to_vec(&payload).expect("serialize"), &sig)
+            .is_ok()
     }
 
     pub fn is_expired(&self) -> bool {

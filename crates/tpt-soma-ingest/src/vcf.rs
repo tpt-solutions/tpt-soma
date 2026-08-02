@@ -1,5 +1,7 @@
+use noodles::vcf;
+use noodles::vcf::variant::record::{AlternateBases, Ids};
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::BufReader;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -31,27 +33,32 @@ impl<'a> VcfParser<'a> {
 
     pub fn parse(&self) -> Result<Vec<VariantRecord>, VcfError> {
         let file = File::open(self.path)?;
-        let reader = BufReader::new(file);
+        let mut reader = BufReader::new(file);
+        let mut vcf_reader = vcf::io::Reader::new(&mut reader);
+
+        let _header = vcf_reader
+            .read_header()
+            .map_err(|e| VcfError::Parse(e.to_string()))?;
+
         let mut records = Vec::new();
 
-        for line in reader.lines() {
-            let line = line?;
-            if line.starts_with('#') {
-                continue;
-            }
-            let fields: Vec<&str> = line.split('\t').collect();
-            if fields.len() < 5 {
-                continue;
-            }
-            let chromosome = fields[0].to_string();
-            let position = fields[1].parse().unwrap_or(0);
-            let rsid = if fields[2].starts_with("rs") {
-                Some(fields[2].to_string())
-            } else {
-                None
+        for result in vcf_reader.records() {
+            let record = result.map_err(|e| VcfError::Parse(e.to_string()))?;
+            let chromosome = record.reference_sequence_name().to_string();
+            let position = match record.variant_start() {
+                Some(Ok(pos)) => usize::from(pos) as i32,
+                Some(Err(e)) => return Err(VcfError::Parse(e.to_string())),
+                None => 0,
             };
-            let reference = fields[3].to_string();
-            let alternate = fields[4].to_string();
+            let reference = record.reference_bases().to_string();
+            let alternate_bases: Vec<String> = record
+                .alternate_bases()
+                .iter()
+                .map(|r| r.unwrap_or_default().to_string())
+                .collect();
+            let alternate = alternate_bases.join(",");
+            let rsid = record.ids().iter().next().map(|s| s.to_string());
+
             let variant_id = format!("{}:{}:{}:{}", chromosome, position, reference, alternate);
 
             records.push(VariantRecord {

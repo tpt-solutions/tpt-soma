@@ -1,5 +1,5 @@
-use sqlx::PgPool;
 use chrono::{DateTime, Utc};
+use sqlx::PgPool;
 
 pub struct ComplianceReporter<'a> {
     pool: &'a PgPool,

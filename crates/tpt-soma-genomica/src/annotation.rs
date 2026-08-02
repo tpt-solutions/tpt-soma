@@ -27,6 +27,10 @@ impl VariantAnnotationStore {
     pub fn len(&self) -> usize {
         self.annotations.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.annotations.is_empty()
+    }
 }
 
 pub struct Harmonizer {

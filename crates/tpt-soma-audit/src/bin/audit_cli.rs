@@ -1,6 +1,5 @@
-use clap::{Parser, Subcommand};
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use clap::{Parser, Subcommand};
 use std::str::FromStr;
 use tpt_soma_audit::{AuditLedger, ComplianceReporter};
 use tpt_soma_core::connection::create_pool;
@@ -77,11 +76,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if entries.is_empty() {
                 println!("No access events found.");
             } else {
-                println!("{:<36} {:<15} {:<30} {}", "Actor", "Action", "Timestamp", "Outcome");
+                println!(
+                    "{:<36} {:<15} {:<30} {:<10}",
+                    "Actor", "Action", "Timestamp", "Outcome"
+                );
                 println!("{}", "-".repeat(100));
                 for entry in entries {
                     println!(
-                        "{:<36} {:<15} {:<30} {}",
+                        "{:<36} {:<15} {:<30} {:<10}",
                         entry.actor,
                         entry.action,
                         entry.timestamp.format("%Y-%m-%d %H:%M:%S"),
@@ -104,11 +106,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
 
             println!("Recent audit events (limit: {}):", limit);
-            println!("{:<36} {:<20} {:<15} {:<30} {}", "Actor", "Resource", "Action", "Timestamp", "Outcome");
+            println!(
+                "{:<36} {:<20} {:<15} {:<30} {:<10}",
+                "Actor", "Resource", "Action", "Timestamp", "Outcome"
+            );
             println!("{}", "-".repeat(120));
             for row in rows {
                 println!(
-                    "{:<36} {:<20} {:<15} {:<30} {}",
+                    "{:<36} {:<20} {:<15} {:<30} {:<10}",
                     row.actor,
                     row.resource_class,
                     row.action,
@@ -123,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
 
             let by_outcome = sqlx::query_as::<_, OutcomeStat>(
-                "SELECT outcome, COUNT(*) as count FROM audit_ledger GROUP BY outcome"
+                "SELECT outcome, COUNT(*) as count FROM audit_ledger GROUP BY outcome",
             )
             .fetch_all(&pool)
             .await?;
@@ -166,13 +171,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[derive(sqlx::FromRow)]
 struct AuditEventRow {
-    id: uuid::Uuid,
     actor: String,
     resource_class: String,
     action: String,
-    cohort_scope: Vec<String>,
     timestamp: DateTime<Utc>,
-    query_fingerprint: String,
     outcome: String,
 }
 

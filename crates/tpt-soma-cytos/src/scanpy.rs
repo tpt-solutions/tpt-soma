@@ -17,7 +17,9 @@ pub struct ScanpyOrchestrator {
 
 impl ScanpyOrchestrator {
     pub fn new(script_path: impl Into<String>) -> Self {
-        Self { script_path: script_path.into() }
+        Self {
+            script_path: script_path.into(),
+        }
     }
 
     pub fn run(&self, input: &str, output: &str) -> Result<ScanpyResult, ScanpyError> {
@@ -27,14 +29,17 @@ impl ScanpyOrchestrator {
 
         let status = Command::new("python")
             .arg(&self.script_path)
-            .arg("--input").arg(input)
-            .arg("--output").arg(output)
+            .arg("--input")
+            .arg(input)
+            .arg("--output")
+            .arg(output)
             .status()?;
 
         if !status.success() {
-            return Err(ScanpyError::ExecutionFailed(
-                format!("Scanpy script exited with status: {}", status)
-            ));
+            return Err(ScanpyError::ExecutionFailed(format!(
+                "Scanpy script exited with status: {}",
+                status
+            )));
         }
 
         Ok(ScanpyResult {
@@ -107,7 +112,8 @@ mod tests {
     fn test_script_generation() {
         let temp_dir = tempfile::tempdir().unwrap();
         let script_path = temp_dir.path().join("preprocess.py");
-        ScanpyScriptGenerator::generate_preprocessing_script(script_path.to_str().unwrap()).unwrap();
+        ScanpyScriptGenerator::generate_preprocessing_script(script_path.to_str().unwrap())
+            .unwrap();
         assert!(script_path.exists());
         let content = std::fs::read_to_string(script_path).unwrap();
         assert!(content.contains("scanpy"));

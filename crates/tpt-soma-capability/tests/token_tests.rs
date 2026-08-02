@@ -1,9 +1,7 @@
-use tpt_soma_capability::{
-    token::CapabilityToken,
-    registry::DataClassRegistry,
-    revocation::RevocationList,
-};
 use ed25519_dalek::{SigningKey, VerifyingKey};
+use tpt_soma_capability::{
+    registry::DataClassRegistry, revocation::RevocationList, token::CapabilityToken,
+};
 
 fn deterministic_keypair() -> (SigningKey, VerifyingKey) {
     let bytes = [0x42u8; 32];

@@ -1,8 +1,8 @@
-use tpt_soma_core::connection::Result;
+use csv::ReaderBuilder;
 use sqlx::PgPool;
 use std::fs::File;
 use std::io::BufReader;
-use csv::ReaderBuilder;
+use tpt_soma_core::connection::Result;
 use tpt_soma_ingest::h5ad::ScRNASeqRecord;
 
 pub async fn ingest_scanpy_output(
@@ -12,30 +12,41 @@ pub async fn ingest_scanpy_output(
     labels_path: &str,
 ) -> Result<()> {
     // Read UMAP coordinates
-    let umap_file = File::open(umap_path).map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
-    let mut umap_reader = ReaderBuilder::new().has_headers(true).from_reader(BufReader::new(umap_file));
-    
+    let umap_file = File::open(umap_path)
+        .map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
+    let mut umap_reader = ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(BufReader::new(umap_file));
+
     // Read cluster labels
-    let labels_file = File::open(labels_path).map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
-    let mut labels_reader = ReaderBuilder::new().has_headers(true).from_reader(BufReader::new(labels_file));
-    
+    let labels_file = File::open(labels_path)
+        .map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
+    let mut labels_reader = ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(BufReader::new(labels_file));
+
     // Build cluster map
     let mut cluster_map = std::collections::HashMap::new();
     for result in labels_reader.records() {
-        let record = result.map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
+        let record =
+            result.map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
         let cell_id = record.get(0).unwrap_or("").to_string();
         let cluster = record.get(1).unwrap_or("").to_string();
         cluster_map.insert(cell_id, cluster);
     }
-    
+
     // Insert UMAP coordinates with cluster info
     for result in umap_reader.records() {
-        let record = result.map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
+        let record =
+            result.map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
         let cell_id = record.get(0).unwrap_or("").to_string();
         let umap1: f64 = record.get(1).unwrap_or("0").parse().unwrap_or(0.0);
         let umap2: f64 = record.get(2).unwrap_or("0").parse().unwrap_or(0.0);
-        let cluster = cluster_map.get(&cell_id).cloned().unwrap_or_else(|| "unknown".to_string());
-        
+        let cluster = cluster_map
+            .get(&cell_id)
+            .cloned()
+            .unwrap_or_else(|| "unknown".to_string());
+
         sqlx::query(
             r#"
             INSERT INTO scrna_umap (sample_id, cell_id, umap1, umap2, cluster)
@@ -54,7 +65,7 @@ pub async fn ingest_scanpy_output(
         .execute(pool)
         .await?;
     }
-    
+
     Ok(())
 }
 
@@ -85,8 +96,8 @@ pub async fn ingest_expression_matrix(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
 
     fn create_test_umap() -> NamedTempFile {
         let mut file = NamedTempFile::new().unwrap();

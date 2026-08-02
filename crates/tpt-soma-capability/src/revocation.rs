@@ -29,3 +29,9 @@ impl RevocationList {
         list.is_empty()
     }
 }
+
+impl Default for RevocationList {
+    fn default() -> Self {
+        Self::new()
+    }
+}

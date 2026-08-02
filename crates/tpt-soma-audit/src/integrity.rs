@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 
 pub async fn verify_chain(ledger: &AuditLedger) -> Result<ChainReport, IntegrityError> {
     let pool = &ledger.pool;
-    
+
     // Get all events in order
     let rows = sqlx::query_as::<_, AuditEvent>(
         r#"
@@ -93,7 +93,6 @@ pub enum IntegrityError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::PgPool;
 
     #[tokio::test]
     #[ignore = "requires database"]

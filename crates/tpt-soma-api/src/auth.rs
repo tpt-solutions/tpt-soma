@@ -1,16 +1,16 @@
 use axum::{
     extract::{Request, State},
-    http::{StatusCode},
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tpt_soma_audit::{AuditEvent, AuditLedger};
 use tpt_soma_capability::{CapabilityToken, RevocationList};
 use tpt_soma_core::connection::PgPool;
 use uuid::Uuid;
-use chrono::Utc;
 
 #[derive(Clone)]
 pub struct AuthState {
@@ -18,6 +18,7 @@ pub struct AuthState {
     pub verifying_key: ed25519_dalek::VerifyingKey,
     pub revocation_list: Arc<RevocationList>,
     pub audit_ledger: Arc<AuditLedger>,
+    pub dp_service: Arc<tokio::sync::Mutex<tpt_soma_core::DifferentialPrivacyService>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -30,6 +31,52 @@ pub struct Claims {
     pub nonce: Vec<u8>,
 }
 
+pub async fn record_dp_budget_spend(
+    audit_ledger: &Arc<AuditLedger>,
+    actor: &str,
+    cohort: &str,
+    epsilon_spent: f64,
+) {
+    let event = AuditEvent {
+        id: Uuid::new_v4(),
+        actor: actor.to_string(),
+        resource_class: "dp_budget".to_string(),
+        action: "spend".to_string(),
+        cohort_scope: vec![cohort.to_string()],
+        timestamp: Utc::now(),
+        query_fingerprint: format!(
+            "dp_budget_spend:cohort={}:epsilon={}",
+            cohort, epsilon_spent
+        ),
+        outcome: "success".to_string(),
+        prev_row_hash: None,
+        row_hash: String::new(),
+    };
+    let _ = audit_ledger.append(event).await;
+}
+
+pub async fn record_dp_budget_spend_with_actor(
+    audit_ledger: &Arc<AuditLedger>,
+    actor: &str,
+    cohort: &str,
+    _epsilon_spent: f64,
+    query_fingerprint: &str,
+) {
+    let event = AuditEvent {
+        id: Uuid::new_v4(),
+        actor: actor.to_string(),
+        resource_class: "dp_budget".to_string(),
+        action: "spend".to_string(),
+        cohort_scope: vec![cohort.to_string()],
+        timestamp: Utc::now(),
+        query_fingerprint: query_fingerprint.to_string(),
+        outcome: "success".to_string(),
+        prev_row_hash: None,
+        row_hash: String::new(),
+    };
+    let _ = audit_ledger.append(event).await;
+}
+
 pub async fn capability_middleware(
     State(state): State<Arc<AuthState>>,
     mut req: Request,
@@ -40,13 +87,15 @@ pub async fn capability_middleware(
         .get("Authorization")
         .ok_or(AuthError::MissingAuthHeader)?;
 
-    let auth_str = auth_header.to_str().map_err(|_| AuthError::InvalidAuthHeader)?;
+    let auth_str = auth_header
+        .to_str()
+        .map_err(|_| AuthError::InvalidAuthHeader)?;
     let token_str = auth_str
         .strip_prefix("Bearer ")
         .ok_or(AuthError::InvalidAuthHeader)?;
 
-    let token: CapabilityToken = serde_json::from_str(token_str)
-        .map_err(|_| AuthError::InvalidTokenFormat)?;
+    let token: CapabilityToken =
+        serde_json::from_str(token_str).map_err(|_| AuthError::InvalidTokenFormat)?;
 
     // Verify token signature
     if !token.verify(&state.verifying_key) {
@@ -76,7 +125,7 @@ pub async fn capability_middleware(
         timestamp: Utc::now(),
         query_fingerprint: compute_query_fingerprint(&req),
         outcome: "pending".to_string(),
-        prev_row_hash: None, // Will be filled by audit ledger
+        prev_row_hash: None,     // Will be filled by audit ledger
         row_hash: String::new(), // Will be filled by audit ledger
     };
 
@@ -135,8 +184,12 @@ pub enum AuthError {
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
-            AuthError::MissingAuthHeader => (StatusCode::UNAUTHORIZED, "Missing authorization header"),
-            AuthError::InvalidAuthHeader => (StatusCode::UNAUTHORIZED, "Invalid authorization header"),
+            AuthError::MissingAuthHeader => {
+                (StatusCode::UNAUTHORIZED, "Missing authorization header")
+            }
+            AuthError::InvalidAuthHeader => {
+                (StatusCode::UNAUTHORIZED, "Invalid authorization header")
+            }
             AuthError::InvalidTokenFormat => (StatusCode::UNAUTHORIZED, "Invalid token format"),
             AuthError::InvalidSignature => (StatusCode::UNAUTHORIZED, "Invalid token signature"),
             AuthError::TokenExpired => (StatusCode::UNAUTHORIZED, "Token expired"),

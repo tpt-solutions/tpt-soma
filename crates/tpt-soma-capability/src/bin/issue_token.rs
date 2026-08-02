@@ -1,13 +1,11 @@
 use clap::{Parser, Subcommand};
-use ed25519_dalek::{SigningKey, VerifyingKey};
-use rand::rngs::OsRng;
-use rand::RngCore;
 use std::fs;
 use std::path::PathBuf;
 use tpt_soma_capability::{
-    token::CapabilityToken,
     registry::DataClassRegistry,
     revocation::RevocationList,
+    signing::{LocalSigningBackend, SigningBackend},
+    token::CapabilityToken,
 };
 
 #[derive(Parser)]
@@ -66,18 +64,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Commands::GenKey { output } => {
             fs::create_dir_all(&output)?;
-            let mut csprng = OsRng;
-            let mut key_bytes = [0u8; 32];
-            csprng.fill_bytes(&mut key_bytes);
-            let signing_key = SigningKey::from_bytes(&key_bytes);
-            let verifying_key = signing_key.verifying_key();
+            let backend = LocalSigningBackend::generate();
+            let verifying_key = backend.verifying_key();
 
-            fs::write(output.join("signing_key.bin"), signing_key.to_bytes())?;
+            fs::write(output.join("signing_key.bin"), backend.to_bytes())?;
             fs::write(output.join("verifying_key.bin"), verifying_key.to_bytes())?;
 
             println!("Generated key pair in {}", output.display());
             println!("Signing key: {}", output.join("signing_key.bin").display());
-            println!("Verifying key: {}", output.join("verifying_key.bin").display());
+            println!(
+                "Verifying key: {}",
+                output.join("verifying_key.bin").display()
+            );
         }
         Commands::Issue {
             subject,
@@ -89,16 +87,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             output,
         } => {
             let key_bytes = fs::read(key)?;
-            let signing_key = SigningKey::from_bytes(&key_bytes.try_into().map_err(|_| "Invalid key length")?);
+            let mut key_arr = [0u8; 32];
+            key_arr.copy_from_slice(&key_bytes);
+            let backend = LocalSigningBackend::from_bytes(&key_arr);
 
             let mut registry = DataClassRegistry::default();
             registry.seed_phase0();
 
             if registry.get(&resource_class).is_none() {
-                eprintln!("Warning: resource class '{}' not in registry", resource_class);
+                eprintln!(
+                    "Warning: resource class '{}' not in registry",
+                    resource_class
+                );
             }
 
-            let cohort_scope: Vec<String> = cohort.split(',').map(|s| s.trim().to_string()).collect();
+            let cohort_scope: Vec<String> =
+                cohort.split(',').map(|s| s.trim().to_string()).collect();
 
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
@@ -114,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 signature: Vec::new(),
             };
 
-            token = CapabilityToken::sign(&signing_key, token);
+            token = CapabilityToken::sign(&backend, token);
 
             let token_json = serde_json::to_string_pretty(&token)?;
 
@@ -131,7 +135,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("Registered data classes:");
             for class in registry.list() {
-                println!("  {} - {} ({:?})", class.id, class.description, class.sensitivity);
+                println!(
+                    "  {} - {} ({:?})",
+                    class.id, class.description, class.sensitivity
+                );
             }
         }
         Commands::Revoke { nonce } => {

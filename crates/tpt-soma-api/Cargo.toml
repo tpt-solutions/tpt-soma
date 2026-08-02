@@ -11,6 +11,8 @@ tonic = { workspace = true }
 arrow = { workspace = true }
 arrow-flight = { workspace = true }
 arrow-schema = { workspace = true }
+arrow-array = { workspace = true }
+arrow-ipc = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -25,6 +27,7 @@ ed25519-dalek = { workspace = true }
 chrono = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
+rand = { workspace = true }
 tokio-stream = "0.1"
 tower = { workspace = true }
 tower-http = { workspace = true }
@@ -39,7 +42,16 @@ tpt-soma-ingest = { path = "../tpt-soma-ingest" }
 
 [dev-dependencies]
 tokio-test = "0.4"
+reqwest = { workspace = true }
 
 [[bin]]
 name = "tpt-soma-admin"
 path = "bin/admin.rs"
+
+[[bin]]
+name = "tpt-soma-api"
+path = "src/main.rs"
+
+[[bin]]
+name = "tpt-soma-flight"
+path = "src/flight_main.rs"

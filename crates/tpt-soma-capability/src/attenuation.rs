@@ -1,7 +1,7 @@
 use crate::token::CapabilityToken;
 use hmac::{Hmac, Mac};
-use sha2::Sha256;
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -18,10 +18,8 @@ impl AttenuatedToken {
         narrower_cohort: Vec<String>,
         key: &[u8],
     ) -> Result<Self, AttenuationError> {
-        if !parent.action.contains("admin") {
-            if narrower_action != parent.action {
-                return Err(AttenuationError::ActionExceedsParent);
-            }
+        if !parent.action.contains("admin") && narrower_action != parent.action {
+            return Err(AttenuationError::ActionExceedsParent);
         }
         if narrower_cohort.len() > parent.cohort_scope.len() {
             return Err(AttenuationError::ScopeExceedsParent);

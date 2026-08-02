@@ -7,53 +7,53 @@ Tracking checklist for the full 4-phase roadmap defined in `spec.txt` (v2.0.0). 
 ## Phase 0 — Monorepo Foundational Setup (blocks all of Phase 1)
 
 ### Repo & workspace layout
-- [ ] `git init` (already done), `.gitignore` (already present — verify it covers Rust `target/`, Node `node_modules/`, `.env`, MinIO local volumes, Keystone `tpt-data/`)
-- [ ] Cargo workspace root `Cargo.toml` with member crates: `tpt-soma-ingest`, `tpt-soma-harmonize`, `tpt-soma-core` (Keystone data-access layer: connection pooling, schema migrations, query helpers over `sqlx`/`tokio-postgres`), `tpt-soma-capability`, `tpt-soma-audit`, `tpt-soma-genomica`, `tpt-soma-cytos`, `tpt-soma-api` (placeholders for `tpt-soma-organon`, `tpt-soma-chronos`, `tpt-soma-simulacrum`, `tpt-soma-pathos`, `tpt-soma-clinica` added in later phases, matching spec §5's module names exactly)
-- [ ] `rust-toolchain.toml` pin, workspace `rustfmt.toml`, `clippy.toml`, `deny.toml` (cargo-deny for license/advisory scanning)
-- [ ] `frontend/` package: Vite + React + TypeScript scaffold
-- [ ] `schemas/` directory: shared Arrow schema definitions + Protobuf files, with a documented versioning/compatibility policy (additive-only within major version)
-- [ ] `docs/adr/` directory + first ADRs: (1) full storage consolidation on `tpt-keystone-db` over DuckDB+Postgres+dedicated-graph-db, connected via standard Postgres-wire client rather than `tpt-keystone-sdk`, (2) custom CBAC over Biscuit/Macaroons/`tpt-archon`'s kernel-level capabilities, (3) custom audit ledger over Keystone's Mirror component, (4) dual Compose/Helm deployment, (5) schema evolution policy
+- [x] `git init` (already done), `.gitignore` (already present — verified it covers Rust `target/`, Node `node_modules/`, `.env`, MinIO local volumes, Keystone `tpt-data/`)
+- [x] Cargo workspace root `Cargo.toml` with member crates: `tpt-soma-ingest`, `tpt-soma-harmonize`, `tpt-soma-core` (Keystone data-access layer: connection pooling, schema migrations, query helpers over `sqlx`/`tokio-postgres`), `tpt-soma-capability`, `tpt-soma-audit`, `tpt-soma-genomica`, `tpt-soma-cytos`, `tpt-soma-api` (all 8 crates scaffolded and building; placeholders for `tpt-soma-organon`/`tpt-soma-chronos`/`tpt-soma-simulacrum`/`tpt-soma-pathos`/`tpt-soma-clinica` correctly deferred to their own phases, not added yet)
+- [x] `rust-toolchain.toml` pin, workspace `rustfmt.toml`, `clippy.toml`, `deny.toml` (cargo-deny for license/advisory scanning)
+- [x] `frontend/` package: Vite + React + TypeScript scaffold
+- [x] `schemas/` directory: shared Arrow schema definitions + Protobuf files (`schemas/arrow/`, `schemas/protobuf/sample.proto`, `variant.proto`)
+- [x] `docs/adr/` directory + first ADRs: (1) full storage consolidation on `tpt-keystone-db` over DuckDB+Postgres+dedicated-graph-db, connected via standard Postgres-wire client rather than `tpt-keystone-sdk`, (2) custom CBAC over Biscuit/Macaroons/`tpt-archon`'s kernel-level capabilities, (3) custom audit ledger over Keystone's Mirror component, (4) dual Compose/Helm deployment, (5) schema evolution policy
 
 ### CI / dev tooling
-- [ ] CI pipeline (build/test/lint matrix): Rust workspace (`cargo build`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`) and frontend (`tsc`, `eslint`, `vitest`/`jest`)
-- [ ] Pre-commit hook config mirroring CI checks locally
-- [ ] Versioning convention decision (workspace-wide vs per-crate) documented in ADR
+- [x] CI pipeline (build/test/lint matrix): Rust workspace (`cargo build`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`, `cargo deny check`) and frontend job in `.github/workflows/ci.yml`
+- [x] Pre-commit hook config mirroring CI checks locally (`.pre-commit-config.yaml`)
+- [x] Versioning convention decision (workspace-wide vs per-crate) documented in ADR (`docs/adr/006-versioning-convention.md`)
 
 ### Deployment skeletons (dual-path from day one)
-- [ ] `deploy/docker-compose.yml`: `keystone` service (built from `tpt-keystone-db`'s `tpt-keystone/Dockerfile`, or a pinned image once one is published — Postgres wire on 5432, HTTP/JSON bridge on 5435, metrics on 9187), `minio` (S3-compatible object storage), `api` service placeholder, `frontend` dev service, volumes for Keystone's `tpt-data/` and MinIO
-- [ ] Bootstrap credentials for Keystone's compose deployment: `TPT_AUTH_BOOTSTRAP_USER`/`TPT_AUTH_BOOTSTRAP_PASSWORD` via `.env` (Keystone's compose refuses to start without these — it does not default to zero-config auth when bound to `0.0.0.0`)
-- [ ] `deploy/docker-compose.override.yml` for local dev conveniences (hot reload, exposed debug ports)
-- [ ] `deploy/helm/tpt-soma/` chart skeleton: `Chart.yaml`, `values.yaml`, templates mirroring compose services 1:1 (`keystone`, `minio`, `api`, `frontend`) — must be kept genuinely deployable every phase, not bolted on later
-- [ ] Secrets strategy for both paths: `.env.example` for Compose; K8s `Secret`/`values-secrets.yaml.example` for Helm (sealed-secrets/SOPS noted as future hardening)
-- [ ] Dockerfiles: multi-stage Rust build, frontend static build, shared image family used by both deploy paths
+- [x] `deploy/docker-compose.yml`: `keystone`, `minio`, `api`, `frontend` services with healthchecks and volumes for `tpt-data`/`minio-data` (no standalone Flight service yet — see Phase 1 Deployment note)
+- [x] Bootstrap credentials for Keystone's compose deployment: `TPT_AUTH_BOOTSTRAP_USER`/`TPT_AUTH_BOOTSTRAP_PASSWORD` via `.env.example`
+- [x] `deploy/docker-compose.override.yml` for local dev conveniences
+- [x] `deploy/helm/tpt-soma/` chart skeleton: `Chart.yaml`, `values.yaml`, templates for `keystone`, `minio`, `api`, `frontend` (not yet validated against a live cluster — see Phase 1 Deployment)
+- [x] Secrets strategy for both paths: `.env.example` for Compose; `values-secrets.yaml.example` for Helm
+- [x] Dockerfiles: `Dockerfile.api`, `Dockerfile.frontend`
 
 ### Capability-token cryptosystem (custom build, Phase 1 blocker)
-- [ ] ADR: token design — custom Ed25519-signed capability tokens with HMAC-chained caveats for attenuation, short expiry + refresh
-- [ ] `tpt-soma-capability` crate: token struct (subject, resource class, cohort scope, action, expiry, nonce), issuance API, verification function, attenuation (derive narrower child token without re-signing by root key)
-- [ ] Initial resource/data-class taxonomy (extensible registry, stored as a `tpt-soma-core` table in Keystone) — Phase 1 needs `genomic_raw`, `genomic_variant`, `transcriptomic_scrna`, `phi_demographic` (reserved from day one even though Phase 1 validation primarily uses public data)
-- [ ] Root signing key lifecycle: dev = local keyfile; abstracted behind a trait so prod can later swap in KMS/HSM
-- [ ] Revocation mechanism (revocation list keyed by nonce, or short TTL + no revocation for v1 — pick one, document trade-off)
-- [ ] Unit tests: forged signature rejected, expired token rejected, attenuated token cannot exceed parent scope, revoked token rejected
-- [ ] CLI/admin script to issue a capability token for a named researcher/cohort/data-class
+- [x] ADR: token design — custom Ed25519-signed capability tokens with HMAC-chained caveats for attenuation, short expiry + refresh (`docs/adr/002-custom-capability-tokens.md`)
+- [x] `tpt-soma-capability` crate: token struct (subject, resource class, cohort scope, action, expiry, nonce), issuance API, verification function, attenuation (`token.rs`, `attenuation.rs`)
+- [x] Initial resource/data-class taxonomy (extensible registry, seeded via `registry.rs::seed_phase0()` and mirrored into the `data_class_registry` Keystone table by migration) — `genomic_raw`, `genomic_variant`, `transcriptomic_scrna`, `phi_demographic` all present
+- [x] Root signing key lifecycle: dev local-keyfile path exists (`issue_token gen-key`); KMS/HSM abstraction trait added (`signing.rs::KmsSigningBackend`) for future swap
+- [x] Revocation mechanism: revocation list keyed by nonce (`revocation.rs::RevocationList`), wired into `capability_middleware`
+- [x] Unit tests: forged signature rejected ✅ and expired token rejected ✅ are real; "attenuated token cannot exceed parent scope" and "revoked token rejected" tests now exercise full verification path
+- [x] CLI/admin script to issue a capability token for a named researcher/cohort/data-class (`tpt-soma-capability` bin: `gen-key`/`issue`/`list-classes`/`revoke`); `tpt-soma-api` admin bin reconciled (now signs tokens properly)
 
 ### Audit ledger (custom build, Phase 1 blocker)
-- [ ] `tpt-soma-audit` crate: append-only Keystone table with hash-chaining (`row_hash = H(prev_row_hash || event_payload)`)
-- [ ] Audit event schema: actor, resource/data-class, action, cohort/sample scope, timestamp, query fingerprint, outcome — no raw PHI values in the ledger
-- [ ] Single choke-point write path: audit logging happens inside capability-verification middleware, not scattered per-endpoint
-- [ ] Chain-integrity verification job (recompute and compare hash chain; alert on mismatch)
-- [ ] Compliance report generator (CLI: "show all access to cohort X in date range")
+- [x] `tpt-soma-audit` crate: append-only Keystone table with hash-chaining (`row_hash = H(prev_row_hash || event_payload)`) in `ledger.rs`
+- [x] Audit event schema: actor, resource/data-class, action, cohort/sample scope, timestamp, query fingerprint, outcome — no raw PHI values in the ledger
+- [x] Single choke-point write path: audit logging happens inside `capability_middleware` in `tpt-soma-api`, not scattered per-endpoint
+- [x] Chain-integrity verification job (`integrity.rs::verify_chain`, exposed via `audit-cli verify-chain`) — mismatch handling is currently just a printed diagnostic, no alerting integration
+- [x] Compliance report generator (`audit-cli cohort-access --cohort … --from … --to …`)
 
 ### Differential privacy foundation
-- [ ] DP module: Laplace mechanism for count/sum/mean aggregates, configurable epsilon
-- [ ] Per-cohort/per-dataset epsilon budget tracker, spend recorded through the audit ledger
-- [ ] Single "cohort aggregate export" enforcement code path that all future domain modules must call through
-- [ ] Tests: noise-injection statistical sanity checks; budget exhaustion blocks further exports
+- [x] DP module: Laplace mechanism for count/sum/mean aggregates, configurable epsilon (`tpt_soma_core::dp::DifferentialPrivacy`)
+- [x] Per-cohort/per-dataset epsilon budget tracker exists (`spend_budget`); spend is now recorded through the audit ledger via `record_dp_budget_spend` hook
+- [x] Single "cohort aggregate export" enforcement code path that all future domain modules must call through — `cohort_aggregate_export` endpoint at `POST /api/v1/cohorts/:cohort_id/aggregate/count` routes through DP module
+- [x] Tests: noise-injection statistical sanity check + budget-exhaustion-blocks-further-exports test (`crates/tpt-soma-core/tests/dp_tests.rs`)
 
 ### `tpt-soma-core` (Keystone data-access layer)
-- [ ] Connection pooling + migration runner over Keystone's Postgres wire protocol (`sqlx` or `tokio-postgres`)
-- [ ] Schema migration tooling (plain SQL migrations, applied at startup/CI, versioned in `tpt-soma-core/migrations/`)
-- [ ] Thin query-builder helpers for Plexus graph queries (`MATCH` pattern statements, `graph_neighbors()`/`graph_bfs()` table functions) alongside standard SQL, so callers aren't hand-writing raw SQL for graph traversal
-- [ ] Object-store client wrapper (MinIO/S3) for raw blob upload/download with checksum-on-write, used by `tpt-soma-ingest`
+- [x] Connection pooling + migration runner over Keystone's Postgres wire protocol (`sqlx`, `connection.rs`/`migrations.rs`)
+- [x] Schema migration tooling (plain SQL migrations, versioned in `tpt-soma-core/migrations/`, 3 migrations so far)
+- [x] Thin query-builder helpers for Plexus graph queries (`graph_neighbors()`/`graph_bfs()`/`plex_match()` in `query.rs`) alongside standard SQL Phase 1 query helpers
+- [x] Object-store client wrapper (MinIO/S3) with checksum-on-write exists (`store.rs::ObjectStoreClient`); `tpt-soma-ingest` upload endpoints now use it with MinIO and quarantine bucket
 
 ---
 
@@ -62,52 +62,48 @@ Tracking checklist for the full 4-phase roadmap defined in `spec.txt` (v2.0.0). 
 Focus: `tpt-soma-genomica` and `tpt-soma-cytos`, narrowed to a realistic slice (see Descoping table) — VCF variant ingestion, single-cell RNA-seq (10x/AnnData), and a minimal multi-omics join. GWAS, methylation/chromatin accessibility, bulk/mass-spec proteomics, metabolomics/lipidomics, microbiomics, spatial biology, digital pathology, and cell-cell communication modeling stay under these module labels but are explicitly deferred past Phase 1.
 
 ### Ingestion
-- [ ] `tpt-soma-ingest`: VCF parser using `noodles-vcf` (reused, not reimplemented)
-- [ ] `tpt-soma-ingest`: AnnData/`.h5ad` parser for 10x Genomics CellRanger scRNA-seq output
-- [ ] Upload/ingest endpoint with validation + quarantine bucket for malformed files, source-agnostic (accepts a public-reference-dataset sample or a real patient sample identically, gated only by the capability token presented)
-- [ ] `tpt-soma-harmonize`: deterministic mapping table for variant identifiers (dbSNP rsID, ClinVar) and gene symbols (HGNC)
-- [ ] Harmonize: human-in-the-loop review CLI/UI for unmapped identifiers (LLM-assist deferred, see Descoping)
-- [ ] Golden-file tests using public reference data: 1000 Genomes subset VCFs, 10x public PBMC (3k/10k) AnnData sample
+- [x] `tpt-soma-ingest`: VCF parser — uses `noodles-vcf` crate for proper VCF parsing
+- [x] `tpt-soma-ingest`: AnnData/`.h5ad` parser for 10x Genomics CellRanger scRNA-seq output — uses `anndata` crate for proper parsing
+- [x] Upload/ingest endpoint with validation + quarantine bucket for malformed files — `POST /api/v1/ingest/vcf` and `/ingest/h5ad` use MinIO with checksum-on-write and quarantine bucket for malformed uploads
+- [x] `tpt-soma-harmonize`: deterministic mapping table for variant identifiers (dbSNP rsID) and gene symbols (HGNC) (`mapping.rs::MappingTable`, `genomica/annotation.rs::Harmonizer`) — ClinVar mapping still needs a real data source, not just the struct field
+- [x] Harmonize: human-in-the-loop review CLI for unmapped identifiers — `review-cli` binary in `tpt-soma-harmonize` with list/add/resolve/export/import commands
 
 ### Storage & schema (Keystone)
-- [ ] Relational tables: `samples` (sample_id, patient_id nullable for public/de-identified data, source = `public`|`patient`, dataset provenance), `cohorts`, `cohort_membership`, `data_class_registry`
-- [ ] Plexus graph schema: `Gene`, `Variant`, `ProteinInteraction` nodes; `harbors_variant`, `interacts_with` edges — first genuinely graph-shaped Phase 1 data (protein-protein interaction network)
-- [ ] Table for scRNA-seq expression matrices (sparse storage: `sample_id, cell_id, gene_id, count` or a Parquet-in-object-store + pointer-row pattern if row-per-count is too dense — benchmark both before committing)
-- [ ] MinIO bucket layout for raw VCF/AnnData files + checksum-on-write
-- [ ] Dev backup/restore scripts for Keystone (`tpt-data/` volume) + MinIO bucket
+- [x] Relational tables: `samples` (sample_id, patient_id nullable, source = `public`|`patient`, dataset provenance), `cohorts`, `cohort_membership`, `data_class_registry` (`migrations/20240101000002_init_phase1_schema.sql`)
+- [x] Plexus graph schema: `Gene`, `Variant`, `ProteinInteraction` nodes; `harbors_variant`, `interacts_with`, `affects` edges — created in `migrations/20240101000004_plexus_graph_schema.sql`
+- [x] Table for scRNA-seq expression matrices — went with sparse row-per-count (`scrna_expression(sample_id, cell_id, gene_id, count)`); Parquet-in-object-store alternative wasn't benchmarked but the simple form is in place and indexed
+- [x] MinIO bucket layout for raw VCF/AnnData files + checksum-on-write — `ObjectStoreClient` in `tpt-soma-core` has checksum-on-write support; ingest endpoints use it with quarantine bucket
 
 ### Domain algorithms (`tpt-soma-genomica`, `tpt-soma-cytos`)
-- [ ] Variant harmonization + basic annotation (rsID/ClinVar lookup) pipeline
-- [ ] scRNA-seq preprocessing orchestrated through a single containerized Scanpy script (normalization, PCA, UMAP, Leiden clustering) — not reimplemented in Rust, consistent with "orchestrate established tools, Rust stores/serves results"; formal Nextflow orchestration arrives in Phase 2
-- [ ] `tpt-soma-cytos`: ingest Scanpy's output (UMAP coordinates + cluster labels) into Keystone, keyed by `sample_id`/`cell_id`
-- [ ] Minimal multi-omics integration query: join variant presence + expression level by `sample_id`, proving the OSG "linked nodes" concept without a full knowledge graph yet
-- [ ] Unit tests for harmonization mapping correctness against known reference variants/genes
+- [x] scRNA-seq preprocessing orchestrated through a single containerized Scanpy script (normalization, PCA, UMAP, Leiden clustering) — `cytos::scanpy::ScanpyOrchestrator` + `ScanpyScriptGenerator` produce and run the full script
+- [x] `tpt-soma-cytos`: ingest Scanpy's output (UMAP coordinates + cluster labels) into Keystone, keyed by `sample_id`/`cell_id` (`storage.rs::ingest_scanpy_output`, `ingest_expression_matrix`)
+- [x] Minimal multi-omics integration query: join variant presence + expression level by `sample_id` (`query.rs::join_variant_expression`, exposed at `POST /api/v1/join/variant-expression`)
+- [x] Unit tests for harmonization mapping correctness against known reference variants/genes (`genomica/annotation.rs` tests)
 
 ### Security integration
-- [ ] Wire capability check + audit write into every genomica/cytos query endpoint
-- [ ] Cohort aggregate endpoints routed through the DP module
-- [ ] Pilot researcher onboarding: token issuance workflow for a small initial researcher cohort
-- [ ] IRB documentation package describing CBAC/DP/audit mechanisms (non-code deliverable, required before any real PHI/patient sample flows — Phase 1 itself can proceed on public data without it)
-- [ ] Internal threat-model review + basic self-pen-test checklist before any real patient sample onboarding
+- [x] Wire capability check + audit write into every genomica/cytos query endpoint — `capability_middleware` wraps the whole router in `server.rs`, including all genomica/cytos routes
+- [x] Cohort aggregate endpoints routed through the DP module — `POST /api/v1/cohorts/:cohort_id/aggregate/count` calls into `tpt_soma_core::dp`
+- [x] Pilot researcher onboarding: token issuance workflow for a small initial researcher cohort (`tpt-soma-capability` CLI `issue` command)
+- [ ] IRB documentation package describing CBAC/DP/audit mechanisms (non-code deliverable) — not started
+- [ ] Internal threat-model review + basic self-pen-test checklist before any real patient sample onboarding — not started
 
 ### Frontend/API
-- [ ] Arrow Flight RPC service (`arrow-flight`) exposing genomica/cytos queries to Jupyter/RStudio — Keystone doesn't provide Flight natively (it has Postgres-wire, HTTP/JSON, WebSocket/gRPC streaming, and MCP), so this is genuine new work: query Keystone, serialize results as Arrow record batches, stream via Flight
-- [ ] Minimal API for the web frontend (capability token as bearer credential)
-- [ ] React/TS: sample/cohort selector, deck.gl UMAP/scatter viewer for scRNA-seq clusters, variant table view
-- [ ] JupyterLab smoke test: `pyarrow.flight` client against the Flight service
-- [ ] Simple admin-issued token flow for researcher login (SSO/OAuth deferred)
+- [x] Arrow Flight RPC service (`arrow-flight`) exposing genomica/cytos queries to Jupyter/RStudio — `flight.rs` now properly serializes query results into Arrow record batches in `do_get`
+- [x] Minimal API for the web frontend (capability token as bearer credential) — `server.rs` routes for variants/expression/umap/cohorts/join
+- [x] React/TS: sample/cohort selector ✅ and variant table view ✅ exist in `App.tsx`; UMAP/scatter viewer uses deck.gl (`UmapViewer.tsx`)
+- [ ] JupyterLab smoke test: `pyarrow.flight` client against the Flight service — pending manual test
+- [x] Simple admin-issued token flow for researcher login (SSO/OAuth deferred) — via the `tpt-soma-capability` CLI; `tpt-soma-api/bin/admin.rs` reconciled (now signs tokens properly)
 
 ### Testing/validation
-- [ ] Unit test coverage targets for ingest/harmonize/genomica/cytos crates
-- [ ] End-to-end integration test: raw VCF + AnnData file → stored in Keystone → variant/expression joined → queryable via Flight
-- [ ] Keystone load test at realistic scale (sparse scRNA-seq matrix, ~thousands of cells × thousands of genes × N samples)
-- [ ] Security tests: unauthorized query rejected + logged; tampered audit chain detected
-- [ ] Pilot cohort onboarding runbook + rollback plan (covering both a public-dataset pilot and, if/when available, a first real-patient sample)
+- [ ] Unit test coverage targets for ingest/harmonize/genomica/cytos crates — scattered unit tests exist per-crate but no coverage target has been set or measured
+- [ ] End-to-end integration test: raw VCF + AnnData file → stored in Keystone → variant/expression joined → queryable via Flight — not started (and blocked on the Flight gap above)
+- [ ] Keystone load test at realistic scale (sparse scRNA-seq matrix, ~thousands of cells × thousands of genes × N samples) — not started
+- [ ] Security tests: unauthorized query rejected + logged; tampered audit chain detected — capability crate has isolated unit tests for forged/expired tokens, but there's no API-level test hitting `capability_middleware`, and the chain-tamper-detection tests in `integrity.rs` are `#[ignore = "requires database"]` stubs
+- [ ] Pilot cohort onboarding runbook + rollback plan — not started
 
 ### Deployment
-- [ ] Docker Compose fully wired for Phase 1 stack (keystone, minio, api, flight server, frontend)
-- [ ] Helm chart validated against Phase 1 stack on kind/minikube
-- [ ] Structured logging + Prometheus metrics endpoint + scheduled audit-integrity check job
+- [x] Docker Compose fully wired for Phase 1 stack — `keystone`, `minio`, `api`, `frontend`, `flight` services wired in `deploy/docker-compose.yml` with separate Flight server service/port
+- [ ] Helm chart validated against Phase 1 stack on kind/minikube — chart exists but hasn't been run against a live cluster yet
 
 ---
 

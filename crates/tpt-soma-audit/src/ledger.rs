@@ -1,8 +1,8 @@
-use sqlx::PgPool;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
-use uuid::Uuid;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use sqlx::PgPool;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct AuditEvent {
@@ -75,14 +75,16 @@ impl AuditLedger {
 
     pub async fn tail_hash(&self) -> Result<Option<String>, AuditError> {
         let row = sqlx::query_scalar::<_, Option<String>>(
-            "SELECT row_hash FROM audit_ledger ORDER BY timestamp DESC LIMIT 1"
+            "SELECT row_hash FROM audit_ledger ORDER BY timestamp DESC LIMIT 1",
         )
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.flatten())
     }
 
-    pub async fn verify_chain(&self) -> Result<crate::integrity::ChainReport, crate::integrity::IntegrityError> {
+    pub async fn verify_chain(
+        &self,
+    ) -> Result<crate::integrity::ChainReport, crate::integrity::IntegrityError> {
         crate::integrity::verify_chain(self).await
     }
 }
