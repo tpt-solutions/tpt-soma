@@ -27,19 +27,16 @@ pub fn ejection_fraction(end_diastolic_volume: f64, end_systolic_volume: f64) ->
 }
 
 /// GFR calculation using CKD-EPI 2021 equation (renal)
-pub fn gfr_ckd_epi_2021(
-    creatinine: f64,
-    age: u32,
-    is_female: bool,
-    is_black: bool,
-) -> Result<f64> {
+pub fn gfr_ckd_epi_2021(creatinine: f64, age: u32, is_female: bool, is_black: bool) -> Result<f64> {
     if creatinine <= 0.0 {
         return Err(OrganonError::InvalidInput(
             "Creatinine must be positive".to_string(),
         ));
     }
     if age == 0 {
-        return Err(OrganonError::InvalidInput("Age must be positive".to_string()));
+        return Err(OrganonError::InvalidInput(
+            "Age must be positive".to_string(),
+        ));
     }
 
     let k = if is_female { 0.7 } else { 0.9 };
@@ -51,15 +48,16 @@ pub fn gfr_ckd_epi_2021(
     let min_term = scr_k.min(1.0).powf(alpha);
     let max_term = scr_k.max(1.0).powf(-1.2);
 
-    let gfr = 142.0 * min_term * max_term * (0.9938_f64.powi(age as i32)) * sex_factor * race_factor;
+    let gfr =
+        142.0 * min_term * max_term * (0.9938_f64.powi(age as i32)) * sex_factor * race_factor;
     Ok(gfr.max(0.0))
 }
 
 /// Pulmonary function indices
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PulmonaryFunction {
-    pub fev1: f64,        // Forced expiratory volume in 1 second (L)
-    pub fvc: f64,         // Forced vital capacity (L)
+    pub fev1: f64, // Forced expiratory volume in 1 second (L)
+    pub fvc: f64,  // Forced vital capacity (L)
     pub fev1_fvc_ratio: f64,
     pub pef: Option<f64>, // Peak expiratory flow (L/s)
 }
@@ -193,6 +191,20 @@ impl ReferenceRanges {
         Self { version, ranges }
     }
 
+    /// Load reference ranges from a JSON file
+    pub fn from_file(path: &std::path::Path) -> Result<Self> {
+        let content = std::fs::read_to_string(path)?;
+        let ranges: ReferenceRanges = serde_json::from_str(&content)?;
+        Ok(ranges)
+    }
+
+    /// Save reference ranges to a JSON file
+    pub fn to_file(&self, path: &std::path::Path) -> Result<()> {
+        let content = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, content)?;
+        Ok(())
+    }
+
     pub fn check(&self, test: &str, value: f64) -> ReferenceStatus {
         if let Some((low, high)) = self.ranges.get(test) {
             if value < *low {
@@ -257,5 +269,19 @@ mod tests {
         assert_eq!(refs.check("creatinine", 1.0), ReferenceStatus::Normal);
         assert_eq!(refs.check("creatinine", 2.0), ReferenceStatus::High);
         assert_eq!(refs.check("creatinine", 0.5), ReferenceStatus::Low);
+    }
+
+    #[test]
+    fn test_reference_ranges_file_io() {
+        let refs = ReferenceRanges::new("2.0".to_string());
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let path = tmp_dir.path().join("reference_ranges.json");
+
+        refs.to_file(&path).unwrap();
+        let loaded = ReferenceRanges::from_file(&path).unwrap();
+
+        assert_eq!(loaded.version, "2.0");
+        assert_eq!(loaded.check("creatinine", 1.0), ReferenceStatus::Normal);
+        assert_eq!(loaded.check("creatinine", 2.0), ReferenceStatus::High);
     }
 }

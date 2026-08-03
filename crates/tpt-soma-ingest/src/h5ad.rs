@@ -155,7 +155,14 @@ impl<'a> AnnDataParser<'a> {
     }
 
     fn decode_int_array(raw: &[u8]) -> Result<Vec<u32>, H5adError> {
-        let elem_size = if raw.len().is_multiple_of(4) { 4 } else { 8 };
+        // Check for 8-byte first since 8-byte lengths are also multiples of 4
+        let elem_size = if raw.len().is_multiple_of(8) {
+            8
+        } else if raw.len().is_multiple_of(4) {
+            4
+        } else {
+            8
+        };
         let n = raw.len() / elem_size;
         let mut result = Vec::with_capacity(n);
         for i in 0..n {
@@ -247,7 +254,10 @@ mod tests {
     fn decode_int_array_4_byte() {
         // [1u32, 2u32, 3u32] little-endian
         let raw: Vec<u8> = vec![1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0];
-        assert_eq!(AnnDataParser::decode_int_array(&raw).unwrap(), vec![1, 2, 3]);
+        assert_eq!(
+            AnnDataParser::decode_int_array(&raw).unwrap(),
+            vec![1, 2, 3]
+        );
     }
 
     #[test]
@@ -285,6 +295,9 @@ mod tests {
         // The width heuristic is length-based only, so a truncated (3-byte)
         // buffer decodes as 0 elements of the inferred width. Documenting the
         // current lenient behavior rather than silently assuming an error.
-        assert_eq!(AnnDataParser::decode_int_array(&[1, 2, 3]).unwrap(), Vec::<u32>::new());
+        assert_eq!(
+            AnnDataParser::decode_int_array(&[1, 2, 3]).unwrap(),
+            Vec::<u32>::new()
+        );
     }
 }

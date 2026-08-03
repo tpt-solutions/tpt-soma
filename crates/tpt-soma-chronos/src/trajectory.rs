@@ -31,12 +31,12 @@ pub struct TrajectoryPoint {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrajectoryAnalysis {
     pub trajectory_id: Uuid,
-    pub slope: f64,                    // Rate of change per unit time
+    pub slope: f64, // Rate of change per unit time
     pub slope_per_year: f64,
-    pub r_squared: f64,                // Goodness of fit
+    pub r_squared: f64, // Goodness of fit
     pub trend: TrendDirection,
-    pub velocity: f64,                 // Current rate of change
-    pub acceleration: f64,             // Rate of change of velocity
+    pub velocity: f64,     // Current rate of change
+    pub acceleration: f64, // Rate of change of velocity
     pub time_in_range: Option<TimeInRange>,
     pub anomalies: Vec<Anomaly>,
 }
@@ -115,9 +115,9 @@ pub fn analyze_trajectory(trajectory: &OrganFunctionTrajectory) -> Result<Trajec
     let acceleration = calculate_acceleration(&valid_points);
 
     // Time in range if reference range available
-    let time_in_range = trajectory.reference_range.map(|(low, high)| {
-        calculate_time_in_range(&trajectory.time_points, low, high)
-    });
+    let time_in_range = trajectory
+        .reference_range
+        .map(|(low, high)| calculate_time_in_range(&trajectory.time_points, low, high));
 
     // Detect anomalies
     let anomalies = detect_anomalies(&valid_points, slope, intercept);
@@ -137,7 +137,10 @@ pub fn analyze_trajectory(trajectory: &OrganFunctionTrajectory) -> Result<Trajec
 
 fn linear_regression(points: &[&TrajectoryPoint]) -> (f64, f64, f64) {
     let n = points.len() as f64;
-    let x: Vec<f64> = points.iter().map(|p| p.timestamp.timestamp() as f64).collect();
+    let x: Vec<f64> = points
+        .iter()
+        .map(|p| p.timestamp.timestamp() as f64)
+        .collect();
     let y: Vec<f64> = points.iter().map(|p| p.value).collect();
 
     let sum_x: f64 = x.iter().sum();
@@ -199,7 +202,10 @@ fn calculate_acceleration(points: &[&TrajectoryPoint]) -> f64 {
 
 fn calculate_time_in_range(points: &[TrajectoryPoint], low: f64, high: f64) -> TimeInRange {
     let total = points.len() as f64;
-    let in_range = points.iter().filter(|p| p.value >= low && p.value <= high).count() as f64;
+    let in_range = points
+        .iter()
+        .filter(|p| p.value >= low && p.value <= high)
+        .count() as f64;
     let below = points.iter().filter(|p| p.value < low).count() as f64;
     let above = points.iter().filter(|p| p.value > high).count() as f64;
 
@@ -212,11 +218,7 @@ fn calculate_time_in_range(points: &[TrajectoryPoint], low: f64, high: f64) -> T
     }
 }
 
-fn detect_anomalies(
-    points: &[&TrajectoryPoint],
-    slope: f64,
-    intercept: f64,
-) -> Vec<Anomaly> {
+fn detect_anomalies(points: &[&TrajectoryPoint], slope: f64, intercept: f64) -> Vec<Anomaly> {
     let mut anomalies = Vec::new();
 
     for point in points {
@@ -310,10 +312,30 @@ mod tests {
         // Declining creatinine (improving renal function) - negative slope
         let base = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
         trajectory.time_points = vec![
-            TrajectoryPoint { timestamp: base, value: 1.5, is_interpolated: false, visit_id: None },
-            TrajectoryPoint { timestamp: base + chrono::Duration::days(30), value: 1.3, is_interpolated: false, visit_id: None },
-            TrajectoryPoint { timestamp: base + chrono::Duration::days(60), value: 1.1, is_interpolated: false, visit_id: None },
-            TrajectoryPoint { timestamp: base + chrono::Duration::days(90), value: 1.0, is_interpolated: false, visit_id: None },
+            TrajectoryPoint {
+                timestamp: base,
+                value: 1.5,
+                is_interpolated: false,
+                visit_id: None,
+            },
+            TrajectoryPoint {
+                timestamp: base + chrono::Duration::days(30),
+                value: 1.3,
+                is_interpolated: false,
+                visit_id: None,
+            },
+            TrajectoryPoint {
+                timestamp: base + chrono::Duration::days(60),
+                value: 1.1,
+                is_interpolated: false,
+                visit_id: None,
+            },
+            TrajectoryPoint {
+                timestamp: base + chrono::Duration::days(90),
+                value: 1.0,
+                is_interpolated: false,
+                visit_id: None,
+            },
         ];
 
         let analysis = analyze_trajectory(&trajectory).unwrap();
@@ -327,10 +349,30 @@ mod tests {
     #[test]
     fn test_time_in_range() {
         let points = vec![
-            TrajectoryPoint { timestamp: Utc::now(), value: 100.0, is_interpolated: false, visit_id: None },
-            TrajectoryPoint { timestamp: Utc::now(), value: 120.0, is_interpolated: false, visit_id: None },
-            TrajectoryPoint { timestamp: Utc::now(), value: 180.0, is_interpolated: false, visit_id: None },
-            TrajectoryPoint { timestamp: Utc::now(), value: 80.0, is_interpolated: false, visit_id: None },
+            TrajectoryPoint {
+                timestamp: Utc::now(),
+                value: 100.0,
+                is_interpolated: false,
+                visit_id: None,
+            },
+            TrajectoryPoint {
+                timestamp: Utc::now(),
+                value: 120.0,
+                is_interpolated: false,
+                visit_id: None,
+            },
+            TrajectoryPoint {
+                timestamp: Utc::now(),
+                value: 180.0,
+                is_interpolated: false,
+                visit_id: None,
+            },
+            TrajectoryPoint {
+                timestamp: Utc::now(),
+                value: 80.0,
+                is_interpolated: false,
+                visit_id: None,
+            },
         ];
         let tir = calculate_time_in_range(&points, 70.0, 180.0);
         assert!((tir.in_range_pct - 100.0).abs() < 0.01); // 4/4 in range (100, 120, 180, 80 all in [70, 180])

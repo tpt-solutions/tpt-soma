@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tpt_soma_harmonize::io::{export_queue_to_csv, import_csv_mappings};
 use tpt_soma_harmonize::io::{load_mapping_table, load_queue};
 use tpt_soma_harmonize::io::{save_mapping_table, save_queue};
-use tpt_soma_harmonize::{Unmapped};
+use tpt_soma_harmonize::{OntologySource, Unmapped};
 
 #[derive(Parser)]
 #[command(
@@ -39,6 +39,9 @@ enum Commands {
         identifier: String,
         /// The resolved mapping (e.g., rsID or HGNC ID)
         mapping: String,
+        /// Source ontology (e.g., "dbSNP", "HGNC", "LOINC", "SNOMED", "UBERON")
+        #[arg(short, long, default_value = "dbsnp")]
+        source: String,
         /// Path to the review queue JSON file
         #[arg(short, long, default_value = "review_queue.json")]
         queue: PathBuf,
@@ -105,6 +108,7 @@ fn main() -> anyhow::Result<()> {
         Commands::Resolve {
             identifier,
             mapping,
+            source,
             queue,
             mapping_table,
         } => {
@@ -122,12 +126,18 @@ fn main() -> anyhow::Result<()> {
                 );
             }
 
-            // Add to mapping table
-            table.insert(identifier.clone(), mapping.clone());
+            // Parse source and add to mapping table
+            let ontology_source = source
+                .parse::<OntologySource>()
+                .unwrap_or(OntologySource::Other);
+            table.insert_simple(ontology_source, identifier.clone(), mapping.clone());
 
             save_queue(&queue, &review_queue)?;
             save_mapping_table(&mapping_table, &table)?;
-            println!("Resolved '{}' -> '{}'", identifier, mapping);
+            println!(
+                "Resolved '{}' -> '{}' (source: {})",
+                identifier, mapping, source
+            );
         }
         Commands::Export { queue, output } => {
             let review_queue = load_queue(&queue)?;

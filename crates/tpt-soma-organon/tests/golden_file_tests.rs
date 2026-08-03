@@ -1,6 +1,6 @@
 use tpt_soma_organon::ingestion::{
-    csv_to_clinical_observation, loinc, parse_fhir_observation, parse_organ_function_csv,
-    FhirObservation,
+    FhirObservation, csv_to_clinical_observation, loinc, parse_fhir_observation,
+    parse_organ_function_csv,
 };
 
 /// Golden-file test: a FHIR R5 Observation resource (serum creatinine) parses into

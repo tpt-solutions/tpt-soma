@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use tpt_soma_harmonize::OntologySource;
 use tpt_soma_ingest::VcfParser;
 
 /// Test VCF parsing with a minimal valid VCF file
@@ -67,7 +67,6 @@ fn test_vcf_parser_multi_allelic() {
 #[test]
 fn test_ingest_harmonize_integration() {
     use tpt_soma_genomica::{Harmonizer, VariantAnnotationStore};
-    use tpt_soma_harmonize::MappingTable;
 
     // Create VCF with known variants
     let vcf_content = r#"##fileformat=VCFv4.2
@@ -83,7 +82,7 @@ fn test_ingest_harmonize_integration() {
 
     // Parse VCF
     let parser = VcfParser::new(vcf_path.to_str().unwrap());
-    let records = parser.parse().unwrap();
+    let _records = parser.parse().unwrap();
 
     // Set up harmonizer with known mappings
     let mut harmonizer = Harmonizer::new();
@@ -145,10 +144,17 @@ fn test_review_queue_unmapped() {
     // Resolve one
     let identifier = "1:999:G:A".to_string();
     queue.pending.retain(|u| u.identifier != identifier);
-    table.insert(identifier.clone(), "rs999".to_string());
+    table.insert_simple(
+        OntologySource::DbSNP,
+        identifier.clone(),
+        "rs999".to_string(),
+    );
 
     assert_eq!(queue.pending.len(), 1);
-    assert_eq!(table.resolve("1:999:G:A"), Some("rs999"));
+    assert_eq!(
+        table.resolve(OntologySource::DbSNP, "1:999:G:A"),
+        Some("rs999")
+    );
 
     // Test serialization
     let json = serde_json::to_string(&queue).unwrap();
@@ -157,12 +163,14 @@ fn test_review_queue_unmapped() {
 
     let json = serde_json::to_string(&table).unwrap();
     let deserialized: MappingTable = serde_json::from_str(&json).unwrap();
-    assert_eq!(deserialized.resolve("1:999:G:A"), Some("rs999"));
+    assert_eq!(
+        deserialized.resolve(OntologySource::DbSNP, "1:999:G:A"),
+        Some("rs999")
+    );
 }
 
 #[cfg(test)]
 mod download_tests {
-    use super::*;
 
     /// This test is ignored by default as it requires network access.
     /// Run with: cargo test --test golden_file_tests download_1000_genomes -- --ignored

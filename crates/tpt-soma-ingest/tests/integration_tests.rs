@@ -8,7 +8,7 @@ use tpt_soma_capability::{CapabilityToken, RevocationList, signing::LocalSigning
 use tpt_soma_core::connection::{create_pool, run_migrations};
 use tpt_soma_core::query::{graph_neighbors, join_variant_expression};
 use tpt_soma_genomica::{Harmonizer, VariantAnnotationStore, annotation::VariantAnnotation};
-use tpt_soma_harmonize::{MappingTable, ReviewQueue};
+use tpt_soma_harmonize::{MappingTable, OntologySource, ReviewQueue};
 use tpt_soma_ingest::VcfParser;
 use uuid::Uuid;
 
@@ -92,10 +92,17 @@ async fn test_e2e_vcf_h5ad_ingest_join_query()
 
     let identifier = "1:999:G:A".to_string();
     queue.pending.retain(|u| u.identifier != identifier);
-    table.insert(identifier.clone(), "rs999".to_string());
+    table.insert_simple(
+        OntologySource::DbSNP,
+        identifier.clone(),
+        "rs999".to_string(),
+    );
 
     assert_eq!(queue.pending.len(), 0);
-    assert_eq!(table.resolve("1:999:G:A"), Some("rs999"));
+    assert_eq!(
+        table.resolve(OntologySource::DbSNP, "1:999:G:A"),
+        Some("rs999")
+    );
 
     // Test capability token creation and verification
     let mut csprng = rand::thread_rng();

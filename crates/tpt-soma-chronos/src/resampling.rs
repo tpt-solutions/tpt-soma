@@ -58,7 +58,7 @@ pub fn resample_time_series(
     let mut current = start;
     while current <= end {
         regular_times.push(current);
-        current = current + interval;
+        current += interval;
     }
 
     // Interpolate values at regular times
@@ -101,9 +101,7 @@ fn interpolate_at_time(
     config: &ResampleConfig,
 ) -> Result<f64> {
     // Find surrounding points
-    let idx = timestamps
-        .binary_search(&target)
-        .unwrap_or_else(|i| i);
+    let idx = timestamps.binary_search(&target).unwrap_or_else(|i| i);
 
     match config.interpolation_method {
         InterpolationMethod::Nearest => {
@@ -159,10 +157,15 @@ fn interpolate_at_time(
         }
         InterpolationMethod::Cubic => {
             // Simplified cubic - fallback to linear for now
-            interpolate_at_time(timestamps, values, target, &ResampleConfig {
-                interpolation_method: InterpolationMethod::Linear,
-                ..*config
-            })
+            interpolate_at_time(
+                timestamps,
+                values,
+                target,
+                &ResampleConfig {
+                    interpolation_method: InterpolationMethod::Linear,
+                    ..*config
+                },
+            )
         }
     }
 }
@@ -194,7 +197,7 @@ pub fn fill_gaps(
             // e.g., 20 min gap -> 3 points at 5, 10, 15 min
             let gap_minutes = gap.num_minutes();
             let num_points = (gap_minutes / 5).saturating_sub(1) as usize;
-            
+
             if num_points > 0 {
                 let t0 = timestamps[i - 1];
                 let _t1 = timestamps[i];
@@ -244,11 +247,7 @@ pub enum GapFillMethod {
 }
 
 /// Rolling window statistics for time series
-pub fn rolling_statistics(
-    values: &[f64],
-    window_size: usize,
-    stat: RollingStat,
-) -> Vec<f64> {
+pub fn rolling_statistics(values: &[f64], window_size: usize, stat: RollingStat) -> Vec<f64> {
     if window_size == 0 || values.is_empty() {
         return Vec::new();
     }
@@ -266,7 +265,8 @@ pub fn rolling_statistics(
             RollingStat::Mean => window.iter().sum::<f64>() / window.len() as f64,
             RollingStat::Std => {
                 let mean = window.iter().sum::<f64>() / window.len() as f64;
-                let variance = window.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / window.len() as f64;
+                let variance =
+                    window.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / window.len() as f64;
                 variance.sqrt()
             }
             RollingStat::Min => window.iter().fold(f64::INFINITY, |a, &b| a.min(b)),
@@ -275,7 +275,7 @@ pub fn rolling_statistics(
                 let mut sorted: Vec<f64> = window.iter().copied().collect();
                 sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
                 let mid = sorted.len() / 2;
-                if sorted.len() % 2 == 0 {
+                if sorted.len().is_multiple_of(2) {
                     (sorted[mid - 1] + sorted[mid]) / 2.0
                 } else {
                     sorted[mid]

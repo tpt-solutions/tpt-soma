@@ -9,16 +9,12 @@ use tpt_soma_ingest::h5ad::ScRNASeqRecord;
 /// Parse a Scanpy cluster-labels CSV (`cell_id,cluster`) into a map. Rows that
 /// fail to decode are skipped rather than aborting the whole ingest.
 pub fn build_cluster_map(labels: impl Read) -> HashMap<String, String> {
-    let mut labels_reader = ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(labels);
+    let mut labels_reader = ReaderBuilder::new().has_headers(true).from_reader(labels);
     let mut cluster_map = HashMap::new();
-    for result in labels_reader.records() {
-        if let Ok(record) = result {
-            let cell_id = record.get(0).unwrap_or("").to_string();
-            let cluster = record.get(1).unwrap_or("").to_string();
-            cluster_map.insert(cell_id, cluster);
-        }
+    for record in labels_reader.records().flatten() {
+        let cell_id = record.get(0).unwrap_or("").to_string();
+        let cluster = record.get(1).unwrap_or("").to_string();
+        cluster_map.insert(cell_id, cluster);
     }
     cluster_map
 }

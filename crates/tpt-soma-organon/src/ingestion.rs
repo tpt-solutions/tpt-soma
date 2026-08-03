@@ -165,7 +165,11 @@ pub fn parse_fhir_observation(obs: &FhirObservation) -> Result<ClinicalObservati
         Some(FhirValue::String(s)) => s.parse().map_err(|_| {
             OrganonError::Ingestion(format!("Cannot parse string value as number: {}", s))
         })?,
-        _ => return Err(OrganonError::Ingestion("Observation missing numeric value".to_string())),
+        _ => {
+            return Err(OrganonError::Ingestion(
+                "Observation missing numeric value".to_string(),
+            ));
+        }
     };
 
     let unit = match &obs.value {
@@ -236,9 +240,8 @@ pub fn parse_organ_function_csv(content: &str) -> Result<Vec<OrganFunctionCsvRec
     let mut records = Vec::new();
 
     for result in rdr.deserialize() {
-        let record: OrganFunctionCsvRecord = result.map_err(|e| {
-            OrganonError::Ingestion(format!("CSV parse error: {}", e))
-        })?;
+        let record: OrganFunctionCsvRecord =
+            result.map_err(|e| OrganonError::Ingestion(format!("CSV parse error: {}", e)))?;
         records.push(record);
     }
 
@@ -247,8 +250,9 @@ pub fn parse_organ_function_csv(content: &str) -> Result<Vec<OrganFunctionCsvRec
 
 /// Convert CSV record to clinical observation
 pub fn csv_to_clinical_observation(record: OrganFunctionCsvRecord) -> Result<ClinicalObservation> {
-    let loinc_code = map_test_name_to_loinc(&record.test_name)
-        .ok_or_else(|| OrganonError::Ingestion(format!("Unknown test name: {}", record.test_name)))?;
+    let loinc_code = map_test_name_to_loinc(&record.test_name).ok_or_else(|| {
+        OrganonError::Ingestion(format!("Unknown test name: {}", record.test_name))
+    })?;
 
     let effective_time = DateTime::parse_from_rfc3339(&record.test_date)
         .map(|dt| dt.with_timezone(&Utc))
@@ -312,7 +316,10 @@ mod tests {
 
     #[test]
     fn test_map_test_name_to_loinc() {
-        assert_eq!(map_test_name_to_loinc("creatinine"), Some(loinc::CREATININE));
+        assert_eq!(
+            map_test_name_to_loinc("creatinine"),
+            Some(loinc::CREATININE)
+        );
         assert_eq!(map_test_name_to_loinc("ALT"), Some(loinc::ALT));
         assert_eq!(map_test_name_to_loinc("unknown"), None);
     }

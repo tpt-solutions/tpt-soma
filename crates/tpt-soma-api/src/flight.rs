@@ -177,42 +177,44 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
             // wire protocol: the schema must be sent as its own message before
             // any record batches so standard clients (pyarrow.flight, arrow-rs)
             // can reassemble the stream.
-            let result: Result<(arrow_flight::FlightData, arrow_flight::FlightData), tonic::Status> =
-                match data_type.as_str() {
-                    "variants" => match get_variants_by_sample(&pool, &sample_id).await {
-                        Ok(records) => variants_to_batch(records)
+            let result: Result<
+                (arrow_flight::FlightData, arrow_flight::FlightData),
+                tonic::Status,
+            > = match data_type.as_str() {
+                "variants" => match get_variants_by_sample(&pool, &sample_id).await {
+                    Ok(records) => variants_to_batch(records)
+                        .and_then(flight_data_from_batch)
+                        .map_err(|e| tonic::Status::internal(e.to_string())),
+                    Err(e) => Err(tonic::Status::internal(e.to_string())),
+                },
+                "expression" => match get_expression_by_sample(&pool, &sample_id).await {
+                    Ok(records) => expression_to_batch(records)
+                        .and_then(flight_data_from_batch)
+                        .map_err(|e| tonic::Status::internal(e.to_string())),
+                    Err(e) => Err(tonic::Status::internal(e.to_string())),
+                },
+                "umap" => match get_umap_by_sample(&pool, &sample_id).await {
+                    Ok(records) => umap_to_batch(records)
+                        .and_then(flight_data_from_batch)
+                        .map_err(|e| tonic::Status::internal(e.to_string())),
+                    Err(e) => Err(tonic::Status::internal(e.to_string())),
+                },
+                "clinical_observations" => {
+                    match get_clinical_observations_by_subject(&pool, &sample_id).await {
+                        Ok(records) => clinical_observations_to_batch(records)
                             .and_then(flight_data_from_batch)
                             .map_err(|e| tonic::Status::internal(e.to_string())),
                         Err(e) => Err(tonic::Status::internal(e.to_string())),
-                    },
-                    "expression" => match get_expression_by_sample(&pool, &sample_id).await {
-                        Ok(records) => expression_to_batch(records)
-                            .and_then(flight_data_from_batch)
-                            .map_err(|e| tonic::Status::internal(e.to_string())),
-                        Err(e) => Err(tonic::Status::internal(e.to_string())),
-                    },
-                    "umap" => match get_umap_by_sample(&pool, &sample_id).await {
-                        Ok(records) => umap_to_batch(records)
-                            .and_then(flight_data_from_batch)
-                            .map_err(|e| tonic::Status::internal(e.to_string())),
-                        Err(e) => Err(tonic::Status::internal(e.to_string())),
-                    },
-                    "clinical_observations" => {
-                        match get_clinical_observations_by_subject(&pool, &sample_id).await {
-                            Ok(records) => clinical_observations_to_batch(records)
-                                .and_then(flight_data_from_batch)
-                                .map_err(|e| tonic::Status::internal(e.to_string())),
-                            Err(e) => Err(tonic::Status::internal(e.to_string())),
-                        }
                     }
-                    "cgm" => match get_cgm_readings_by_subject(&pool, &sample_id).await {
-                        Ok(records) => cgm_to_batch(records)
-                            .and_then(flight_data_from_batch)
-                            .map_err(|e| tonic::Status::internal(e.to_string())),
-                        Err(e) => Err(tonic::Status::internal(e.to_string())),
-                    },
-                    _ => Err(tonic::Status::invalid_argument("Unknown data type")),
-                };
+                }
+                "cgm" => match get_cgm_readings_by_subject(&pool, &sample_id).await {
+                    Ok(records) => cgm_to_batch(records)
+                        .and_then(flight_data_from_batch)
+                        .map_err(|e| tonic::Status::internal(e.to_string())),
+                    Err(e) => Err(tonic::Status::internal(e.to_string())),
+                },
+                _ => Err(tonic::Status::invalid_argument("Unknown data type")),
+            };
 
             match result {
                 Ok((schema_flight_data, batch_flight_data)) => {
@@ -529,10 +531,16 @@ fn cgm_to_batch(
             .collect::<Vec<_>>(),
     );
     let sensor_ids = StringArray::from(
-        records.iter().map(|r| r.sensor_id.clone()).collect::<Vec<_>>(),
+        records
+            .iter()
+            .map(|r| r.sensor_id.clone())
+            .collect::<Vec<_>>(),
     );
     let is_calibrated = BooleanArray::from(
-        records.iter().map(|r| Some(r.is_calibrated)).collect::<Vec<_>>(),
+        records
+            .iter()
+            .map(|r| Some(r.is_calibrated))
+            .collect::<Vec<_>>(),
     );
 
     RecordBatch::try_new(

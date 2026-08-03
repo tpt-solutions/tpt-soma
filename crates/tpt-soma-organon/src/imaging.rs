@@ -34,13 +34,13 @@ pub struct DicomMetadata {
 pub enum ImagingModality {
     CT,
     MR,
-    US,   // Ultrasound
-    PT,   // PET
-    XA,   // X-ray angiography
-    RF,   // Radiofluoroscopy
-    MG,   // Mammography
-    DX,   // Digital radiography
-    CR,   // Computed radiography
+    US, // Ultrasound
+    PT, // PET
+    XA, // X-ray angiography
+    RF, // Radiofluoroscopy
+    MG, // Mammography
+    DX, // Digital radiography
+    CR, // Computed radiography
     Other(String),
 }
 
@@ -140,10 +140,22 @@ mod tests {
 
     #[test]
     fn test_imaging_modality_from_str() {
-        assert_eq!("CT".parse::<ImagingModality>().unwrap(), ImagingModality::CT);
-        assert_eq!("MR".parse::<ImagingModality>().unwrap(), ImagingModality::MR);
-        assert_eq!("US".parse::<ImagingModality>().unwrap(), ImagingModality::US);
-        assert_eq!("PT".parse::<ImagingModality>().unwrap(), ImagingModality::PT);
+        assert_eq!(
+            "CT".parse::<ImagingModality>().unwrap(),
+            ImagingModality::CT
+        );
+        assert_eq!(
+            "MR".parse::<ImagingModality>().unwrap(),
+            ImagingModality::MR
+        );
+        assert_eq!(
+            "US".parse::<ImagingModality>().unwrap(),
+            ImagingModality::US
+        );
+        assert_eq!(
+            "PT".parse::<ImagingModality>().unwrap(),
+            ImagingModality::PT
+        );
         assert!(matches!(
             "XX".parse::<ImagingModality>().unwrap(),
             ImagingModality::Other(_)

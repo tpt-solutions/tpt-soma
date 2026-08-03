@@ -35,10 +35,12 @@ fn test_h5ad_dense_fixture() {
     assert_eq!(gapdh.count, 200);
 
     // Zero entries must be dropped.
-    assert!(!result
-        .records
-        .iter()
-        .any(|r| r.cell_id == "cell-3" && r.gene_id == "BRCA1"));
+    assert!(
+        !result
+            .records
+            .iter()
+            .any(|r| r.cell_id == "cell-3" && r.gene_id == "BRCA1")
+    );
     let genes: std::collections::HashSet<&str> =
         result.records.iter().map(|r| r.gene_id.as_str()).collect();
     assert_eq!(
@@ -73,8 +75,10 @@ fn test_h5ad_sparse_fixture() {
     assert_eq!(cell3.gene_id, "MYC");
     assert_eq!(cell3.count, 1);
 
-    assert!(result
-        .records
-        .iter()
-        .all(|r| r.sample_id.is_empty() && r.count == 1));
+    assert!(
+        result
+            .records
+            .iter()
+            .all(|r| r.sample_id.is_empty() && r.count == 1)
+    );
 }

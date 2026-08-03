@@ -36,9 +36,15 @@ pub enum ChronosError {
 impl From<Box<dyn std::error::Error + Send + Sync>> for ChronosError {
     fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
         let err_str = err.to_string();
-        if err_str.contains("capability") || err_str.contains("signing") || err_str.contains("token") {
+        if err_str.contains("capability")
+            || err_str.contains("signing")
+            || err_str.contains("token")
+        {
             ChronosError::Capability(err_str)
-        } else if err_str.contains("audit") || err_str.contains("ledger") || err_str.contains("integrity") {
+        } else if err_str.contains("audit")
+            || err_str.contains("ledger")
+            || err_str.contains("integrity")
+        {
             ChronosError::Audit(err_str)
         } else {
             ChronosError::Capability(err_str)

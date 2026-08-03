@@ -1,9 +1,4 @@
-use axum::{
-    Router,
-    body::Body,
-    http::{Request, StatusCode},
-    routing::get,
-};
+use axum::{Router, http::StatusCode, routing::get};
 use ed25519_dalek::SigningKey;
 use rand::RngCore;
 use reqwest;

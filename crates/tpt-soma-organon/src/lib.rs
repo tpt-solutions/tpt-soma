@@ -36,16 +36,30 @@ pub enum OrganonError {
     InvalidInput(String),
     #[error("chronos error: {0}")]
     Chronos(String),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
 }
 
 impl From<Box<dyn std::error::Error + Send + Sync>> for OrganonError {
     fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
         let err_str = err.to_string();
-        if err_str.contains("capability") || err_str.contains("signing") || err_str.contains("token") {
+        if err_str.contains("capability")
+            || err_str.contains("signing")
+            || err_str.contains("token")
+        {
             OrganonError::Capability(err_str)
-        } else if err_str.contains("audit") || err_str.contains("ledger") || err_str.contains("integrity") {
+        } else if err_str.contains("audit")
+            || err_str.contains("ledger")
+            || err_str.contains("integrity")
+        {
             OrganonError::Audit(err_str)
-        } else if err_str.contains("chronos") || err_str.contains("resampling") || err_str.contains("variability") || err_str.contains("trajectory") {
+        } else if err_str.contains("chronos")
+            || err_str.contains("resampling")
+            || err_str.contains("variability")
+            || err_str.contains("trajectory")
+        {
             OrganonError::Chronos(err_str)
         } else {
             OrganonError::Capability(err_str)
@@ -75,7 +89,7 @@ pub mod organ_systems {
 #[cfg(test)]
 mod tests {
     use super::OrganonError;
-    
+
     #[test]
     fn test_organon_error_display() {
         let err = OrganonError::Calculation("test".to_string());

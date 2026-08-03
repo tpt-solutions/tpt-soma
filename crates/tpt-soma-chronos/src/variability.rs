@@ -24,16 +24,16 @@ pub struct GlycemicVariability {
     pub modd: f64,         // Mean of Daily Differences
     pub conga: f64,        // Continuous Overall Net Glycemic Action
     pub lability_index: f64,
-    pub gmi: f64,          // Glucose Management Indicator (estimated HbA1c)
+    pub gmi: f64, // Glucose Management Indicator (estimated HbA1c)
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TimeInRangeMetrics {
-    pub very_low_pct: f64,   // < 54 mg/dL
-    pub low_pct: f64,        // 54-69 mg/dL
-    pub in_range_pct: f64,   // 70-180 mg/dL
-    pub high_pct: f64,       // 181-250 mg/dL
-    pub very_high_pct: f64,  // > 250 mg/dL
+    pub very_low_pct: f64,  // < 54 mg/dL
+    pub low_pct: f64,       // 54-69 mg/dL
+    pub in_range_pct: f64,  // 70-180 mg/dL
+    pub high_pct: f64,      // 181-250 mg/dL
+    pub very_high_pct: f64, // > 250 mg/dL
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -62,7 +62,9 @@ pub fn calculate_glycemic_variability(
         ));
     }
     if readings.is_empty() {
-        return Err(ChronosError::Variability("No readings provided".to_string()));
+        return Err(ChronosError::Variability(
+            "No readings provided".to_string(),
+        ));
     }
 
     // Filter readings within period
@@ -81,15 +83,28 @@ pub fn calculate_glycemic_variability(
 
     let n = filtered_readings.len() as f64;
     let mean = filtered_readings.iter().sum::<f64>() / n;
-    let variance = filtered_readings.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
+    let variance = filtered_readings
+        .iter()
+        .map(|x| (x - mean).powi(2))
+        .sum::<f64>()
+        / n;
     let sd = variance.sqrt();
     let cv = (sd / mean) * 100.0;
 
     // Time in Range (standard ranges)
     let very_low = filtered_readings.iter().filter(|&&x| x < 54.0).count() as f64;
-    let low = filtered_readings.iter().filter(|&&x| x >= 54.0 && x < 70.0).count() as f64;
-    let in_range = filtered_readings.iter().filter(|&&x| x >= 70.0 && x <= 180.0).count() as f64;
-    let high = filtered_readings.iter().filter(|&&x| x > 180.0 && x <= 250.0).count() as f64;
+    let low = filtered_readings
+        .iter()
+        .filter(|&&x| (54.0..70.0).contains(&x))
+        .count() as f64;
+    let in_range = filtered_readings
+        .iter()
+        .filter(|&&x| (70.0..=180.0).contains(&x))
+        .count() as f64;
+    let high = filtered_readings
+        .iter()
+        .filter(|&&x| (180.0..=250.0).contains(&x))
+        .count() as f64;
     let very_high = filtered_readings.iter().filter(|&&x| x > 250.0).count() as f64;
 
     let tir = TimeInRangeMetrics {
@@ -177,7 +192,8 @@ fn calculate_mage(readings: &[f64]) -> f64 {
         if n_idx > p_idx {
             // Nadir after peak - downward excursion
             let amplitude = (p_val - n_val).abs();
-            if amplitude > 1.0 { // Only count significant excursions (>1 mg/dL)
+            if amplitude > 1.0 {
+                // Only count significant excursions (>1 mg/dL)
                 excursions.push(amplitude);
             }
             nadir_idx += 1;
@@ -275,7 +291,8 @@ fn calculate_conga(readings: &[f64], window_minutes: usize) -> f64 {
         0.0
     } else {
         let mean = differences.iter().sum::<f64>() / differences.len() as f64;
-        let variance = differences.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / differences.len() as f64;
+        let variance =
+            differences.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / differences.len() as f64;
         variance.sqrt()
     }
 }
@@ -302,11 +319,9 @@ fn calculate_gmi(mean_glucose: f64) -> f64 {
 }
 
 /// Calculate circadian/ultradian rhythm analysis
-pub fn analyze_rhythms(
-    readings: &[f64],
-    timestamps: &[DateTime<Utc>],
-) -> Result<RhythmAnalysis> {
-    if readings.len() != timestamps.len() || readings.len() < 288 { // At least 24h at 5-min intervals
+pub fn analyze_rhythms(readings: &[f64], timestamps: &[DateTime<Utc>]) -> Result<RhythmAnalysis> {
+    if readings.len() != timestamps.len() || readings.len() < 288 {
+        // At least 24h at 5-min intervals
         return Err(ChronosError::Variability(
             "Insufficient data for rhythm analysis (need >24h)".to_string(),
         ));
@@ -386,15 +401,27 @@ mod tests {
 
     #[test]
     fn test_calculate_glycemic_variability() {
-        let readings: Vec<f64> = (0..288).map(|i| 100.0 + 20.0 * (i as f64 * 0.1).sin()).collect();
+        let readings: Vec<f64> = (0..288)
+            .map(|i| 100.0 + 20.0 * (i as f64 * 0.1).sin())
+            .collect();
         let timestamps: Vec<DateTime<Utc>> = (0..288)
-            .map(|i| Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap() + chrono::Duration::minutes(i * 5))
+            .map(|i| {
+                Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap()
+                    + chrono::Duration::minutes(i * 5)
+            })
             .collect();
 
         let period_start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
         let period_end = Utc.with_ymd_and_hms(2024, 1, 1, 23, 55, 0).unwrap();
 
-        let gv = calculate_glycemic_variability("patient-1", &readings, &timestamps, period_start, period_end).unwrap();
+        let gv = calculate_glycemic_variability(
+            "patient-1",
+            &readings,
+            &timestamps,
+            period_start,
+            period_end,
+        )
+        .unwrap();
 
         assert!(gv.mean_glucose > 90.0 && gv.mean_glucose < 110.0);
         assert!(gv.cv > 0.0 && gv.cv < 50.0);

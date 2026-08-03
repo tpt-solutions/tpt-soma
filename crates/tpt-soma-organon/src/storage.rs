@@ -1,7 +1,7 @@
 //! Persistence for clinical observations, raw FHIR payloads, and organ imaging metadata
 
-use crate::ingestion::ClinicalObservation;
 use crate::imaging::OrganImagingRecord;
+use crate::ingestion::ClinicalObservation;
 use crate::{OrganonError, Result};
 use sqlx::PgPool;
 
@@ -70,10 +70,7 @@ pub async fn insert_fhir_resource_payload(
 
 /// Insert organ imaging metadata (pixel data is expected to already be in MinIO)
 pub async fn insert_organ_imaging_record(pool: &PgPool, record: &OrganImagingRecord) -> Result<()> {
-    let laterality = record
-        .laterality
-        .as_ref()
-        .map(|l| format!("{:?}", l));
+    let laterality = record.laterality.as_ref().map(|l| format!("{:?}", l));
 
     sqlx::query(
         r#"

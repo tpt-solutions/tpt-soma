@@ -288,11 +288,17 @@ async fn ingest_fhir_observation(
     axum::extract::Json(payload): axum::extract::Json<organon_ingestion::FhirObservation>,
 ) -> Result<axum::Json<serde_json::Value>> {
     let observation = organon_ingestion::parse_fhir_observation(&payload)?;
-    let raw_payload = serde_json::to_value(&payload).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let raw_payload =
+        serde_json::to_value(&payload).map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
     organon_storage::insert_clinical_observation(&state.pool, &observation, "fhir").await?;
-    organon_storage::insert_fhir_resource_payload(&state.pool, "Observation", &payload.id, &raw_payload)
-        .await?;
+    organon_storage::insert_fhir_resource_payload(
+        &state.pool,
+        "Observation",
+        &payload.id,
+        &raw_payload,
+    )
+    .await?;
 
     Ok(axum::Json(serde_json::json!({
         "status": "ok",
@@ -341,7 +347,8 @@ async fn ingest_organ_csv(
     for record in records {
         observations.push(organon_ingestion::csv_to_clinical_observation(record)?);
     }
-    let count = organon_storage::insert_clinical_observations(&state.pool, &observations, "csv").await?;
+    let count =
+        organon_storage::insert_clinical_observations(&state.pool, &observations, "csv").await?;
 
     Ok(axum::Json(serde_json::json!({
         "status": "ok",
@@ -355,7 +362,8 @@ async fn get_clinical_observations(
     axum::extract::Path(subject_id): axum::extract::Path<String>,
 ) -> Result<axum::Json<Vec<tpt_soma_core::query::ClinicalObservationRecord>>> {
     let records =
-        tpt_soma_core::query::get_clinical_observations_by_subject(&state.pool, &subject_id).await?;
+        tpt_soma_core::query::get_clinical_observations_by_subject(&state.pool, &subject_id)
+            .await?;
     Ok(axum::Json(records))
 }
 
@@ -442,7 +450,8 @@ async fn ingest_organ_imaging(
         }
     }
 
-    let metadata = metadata.ok_or_else(|| ApiError::BadRequest("missing field: metadata".to_string()))?;
+    let metadata =
+        metadata.ok_or_else(|| ApiError::BadRequest("missing field: metadata".to_string()))?;
     let data = data.ok_or_else(|| ApiError::BadRequest("missing field: file".to_string()))?;
 
     let object_key = organon_imaging::generate_imaging_object_key(
@@ -458,42 +467,43 @@ async fn ingest_organ_imaging(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let record = organon_imaging::OrganImagingRecord {
-        id: uuid::Uuid::new_v4(),
-        subject_id: metadata.subject_id.clone(),
-        dicom_metadata: organon_imaging::DicomMetadata {
-            study_instance_uid: metadata.study_instance_uid,
-            series_instance_uid: metadata.series_instance_uid,
-            sop_instance_uid: metadata.sop_instance_uid,
-            patient_id: metadata.subject_id.clone(),
-            patient_name: None,
-            study_date: None,
-            study_time: None,
-            modality: metadata.modality.parse().unwrap_or(organon_imaging::ImagingModality::Other(
-                "unknown".to_string(),
-            )),
-            body_part_examined: metadata.body_part_examined,
-            rows: metadata.rows.unwrap_or(0),
-            columns: metadata.columns.unwrap_or(0),
-            bits_allocated: 16,
-            bits_stored: 16,
-            pixel_spacing: None,
-            slice_thickness: None,
-            manufacturer: None,
-            manufacturer_model: None,
-            institution_name: None,
-            series_description: None,
-            protocol_name: None,
-        },
-        minio_bucket: state.object_store.bucket().to_string(),
-        minio_object_key: object_key.clone(),
-        checksum_sha256: checksum,
-        file_size_bytes: data.len() as u64,
-        ingested_at: chrono::Utc::now(),
-        organ_system: metadata.organ_system,
-        laterality: None,
-        view_position: None,
-    };
+    let record =
+        organon_imaging::OrganImagingRecord {
+            id: uuid::Uuid::new_v4(),
+            subject_id: metadata.subject_id.clone(),
+            dicom_metadata: organon_imaging::DicomMetadata {
+                study_instance_uid: metadata.study_instance_uid,
+                series_instance_uid: metadata.series_instance_uid,
+                sop_instance_uid: metadata.sop_instance_uid,
+                patient_id: metadata.subject_id.clone(),
+                patient_name: None,
+                study_date: None,
+                study_time: None,
+                modality: metadata.modality.parse().unwrap_or(
+                    organon_imaging::ImagingModality::Other("unknown".to_string()),
+                ),
+                body_part_examined: metadata.body_part_examined,
+                rows: metadata.rows.unwrap_or(0),
+                columns: metadata.columns.unwrap_or(0),
+                bits_allocated: 16,
+                bits_stored: 16,
+                pixel_spacing: None,
+                slice_thickness: None,
+                manufacturer: None,
+                manufacturer_model: None,
+                institution_name: None,
+                series_description: None,
+                protocol_name: None,
+            },
+            minio_bucket: state.object_store.bucket().to_string(),
+            minio_object_key: object_key.clone(),
+            checksum_sha256: checksum,
+            file_size_bytes: data.len() as u64,
+            ingested_at: chrono::Utc::now(),
+            organ_system: metadata.organ_system,
+            laterality: None,
+            view_position: None,
+        };
 
     organon_storage::insert_organ_imaging_record(&state.pool, &record).await?;
 
@@ -521,7 +531,8 @@ async fn get_organ_imaging(
     axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
     axum::extract::Path(subject_id): axum::extract::Path<String>,
 ) -> Result<axum::Json<Vec<tpt_soma_core::query::OrganImagingRecord>>> {
-    let records = tpt_soma_core::query::get_organ_imaging_by_subject(&state.pool, &subject_id).await?;
+    let records =
+        tpt_soma_core::query::get_organ_imaging_by_subject(&state.pool, &subject_id).await?;
     Ok(axum::Json(records))
 }
 
@@ -585,7 +596,12 @@ async fn ingest_cgm(
     let parse_result = match params.source.as_str() {
         "dexcom" => chronos_cgm::dexcom::parse_dexcom_csv(&content),
         "libre" => chronos_cgm::libre::parse_libre_csv(&content),
-        other => return Err(ApiError::BadRequest(format!("unknown CGM source: {}", other))),
+        other => {
+            return Err(ApiError::BadRequest(format!(
+                "unknown CGM source: {}",
+                other
+            )));
+        }
     };
 
     let mut readings = match parse_result {
@@ -603,7 +619,8 @@ async fn ingest_cgm(
         }
     };
 
-    chronos_cgm::validate_cgm_readings(&readings).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    chronos_cgm::validate_cgm_readings(&readings)
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
     chronos_cgm::sort_readings(&mut readings);
 
     let count = chronos_storage::insert_cgm_readings(&state.pool, &readings).await?;
@@ -619,7 +636,8 @@ async fn get_cgm_readings(
     axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
     axum::extract::Path(subject_id): axum::extract::Path<String>,
 ) -> Result<axum::Json<Vec<tpt_soma_core::query::CgmReadingRecord>>> {
-    let records = tpt_soma_core::query::get_cgm_readings_by_subject(&state.pool, &subject_id).await?;
+    let records =
+        tpt_soma_core::query::get_cgm_readings_by_subject(&state.pool, &subject_id).await?;
     Ok(axum::Json(records))
 }
 

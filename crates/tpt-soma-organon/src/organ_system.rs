@@ -23,11 +23,11 @@ pub enum CouplingType {
 /// Cross-organ coupling edge
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrossOrganCoupling {
-    pub source_organ: String,      // UBERON code
-    pub target_organ: String,      // UBERON code
+    pub source_organ: String, // UBERON code
+    pub target_organ: String, // UBERON code
     pub coupling_type: CouplingType,
-    pub strength: f64,             // 0.0 to 1.0
-    pub mediators: Vec<String>,    // e.g., hormone names, cytokines
+    pub strength: f64,          // 0.0 to 1.0
+    pub mediators: Vec<String>, // e.g., hormone names, cytokines
     pub evidence_level: EvidenceLevel,
     pub description: String,
 }
@@ -73,12 +73,18 @@ impl OrganSystemGraph {
         self.edges.push(edge);
     }
 
-    pub fn get_neighbors(&self, organ: &str, coupling_type: Option<CouplingType>) -> Vec<&CrossOrganCoupling> {
+    pub fn get_neighbors(
+        &self,
+        organ: &str,
+        coupling_type: Option<CouplingType>,
+    ) -> Vec<&CrossOrganCoupling> {
         self.edges
             .iter()
             .filter(|e| {
                 (e.source_organ == organ || e.target_organ == organ)
-                    && coupling_type.as_ref().map_or(true, |ct| &e.coupling_type == ct)
+                    && coupling_type
+                        .as_ref()
+                        .is_none_or(|ct| &e.coupling_type == ct)
             })
             .collect()
     }
@@ -93,7 +99,14 @@ impl OrganSystemGraph {
         let mut visited = HashSet::new();
         let mut current_path = Vec::new();
 
-        self.dfs_find_paths(source, target, max_depth, &mut visited, &mut current_path, &mut paths);
+        self.dfs_find_paths(
+            source,
+            target,
+            max_depth,
+            &mut visited,
+            &mut current_path,
+            &mut paths,
+        );
         paths
     }
 
@@ -173,15 +186,27 @@ impl Default for OrganSystemGraph {
             uberon_id: "UBERON:0002107".to_string(), // liver
             name: "Liver".to_string(),
             system: "hepatic".to_string(),
-            functions: vec!["detoxification".to_string(), "protein_synthesis".to_string(), "metabolism".to_string()],
-            biomarkers: vec!["1742-6".to_string(), "1920-8".to_string(), "6768-6".to_string()], // ALT, AST, ALP
+            functions: vec![
+                "detoxification".to_string(),
+                "protein_synthesis".to_string(),
+                "metabolism".to_string(),
+            ],
+            biomarkers: vec![
+                "1742-6".to_string(),
+                "1920-8".to_string(),
+                "6768-6".to_string(),
+            ], // ALT, AST, ALP
         });
 
         graph.add_node(OrganNode {
             uberon_id: "UBERON:0002113".to_string(), // kidney
             name: "Kidney".to_string(),
             system: "renal".to_string(),
-            functions: vec!["filtration".to_string(), "electrolyte_balance".to_string(), "blood_pressure".to_string()],
+            functions: vec![
+                "filtration".to_string(),
+                "electrolyte_balance".to_string(),
+                "blood_pressure".to_string(),
+            ],
             biomarkers: vec!["2160-0".to_string(), "62238-1".to_string()], // Creatinine, eGFR
         });
 
@@ -205,7 +230,10 @@ impl Default for OrganSystemGraph {
             uberon_id: "UBERON:0000949".to_string(), // pancreas
             name: "Pancreas".to_string(),
             system: "endocrine".to_string(),
-            functions: vec!["insulin_secretion".to_string(), "glucagon_secretion".to_string()],
+            functions: vec![
+                "insulin_secretion".to_string(),
+                "glucagon_secretion".to_string(),
+            ],
             biomarkers: vec!["4548-4".to_string(), "1558-6".to_string()], // HbA1c, Glucose
         });
 
@@ -241,7 +269,11 @@ impl Default for OrganSystemGraph {
             target_organ: "UBERON:0004535".to_string(), // heart
             coupling_type: CouplingType::Mechanical,
             strength: 0.7,
-            mediators: vec!["renin".to_string(), "angiotensin".to_string(), "aldosterone".to_string()],
+            mediators: vec![
+                "renin".to_string(),
+                "angiotensin".to_string(),
+                "aldosterone".to_string(),
+            ],
             evidence_level: EvidenceLevel::HumanInterventional,
             description: "RAAS system links renal perfusion to cardiac load".to_string(),
         });
@@ -271,7 +303,10 @@ impl Default for OrganSystemGraph {
             target_organ: "UBERON:0002107".to_string(), // liver
             coupling_type: CouplingType::Metabolic,
             strength: 0.7,
-            mediators: vec!["portal_venous_nutrients".to_string(), "bile_acids".to_string()],
+            mediators: vec![
+                "portal_venous_nutrients".to_string(),
+                "bile_acids".to_string(),
+            ],
             evidence_level: EvidenceLevel::HumanObservational,
             description: "Gut-liver axis via portal circulation".to_string(),
         });
@@ -281,9 +316,14 @@ impl Default for OrganSystemGraph {
             target_organ: "UBERON:0001007".to_string(), // intestine
             coupling_type: CouplingType::Endocrine,
             strength: 0.5,
-            mediators: vec!["insulin".to_string(), "glucagon".to_string(), "somatostatin".to_string()],
+            mediators: vec![
+                "insulin".to_string(),
+                "glucagon".to_string(),
+                "somatostatin".to_string(),
+            ],
             evidence_level: EvidenceLevel::AnimalModel,
-            description: "Pancreatic hormones affect intestinal motility and absorption".to_string(),
+            description: "Pancreatic hormones affect intestinal motility and absorption"
+                .to_string(),
         });
 
         graph.add_edge(CrossOrganCoupling {
@@ -313,7 +353,7 @@ pub struct DysfunctionCascade {
 pub struct OrganDysfunction {
     pub organ: String,
     pub dysfunction_type: String,
-    pub severity: f64, // 0.0 to 1.0
+    pub severity: f64,        // 0.0 to 1.0
     pub pathway: Vec<String>, // Organ UBERON IDs in path
     pub mediators: Vec<String>,
 }
@@ -326,7 +366,12 @@ impl OrganSystemGraph {
         severity: f64,
     ) -> DysfunctionCascade {
         let mut affected = HashMap::new();
-        let mut queue = vec![(initial_organ.to_string(), severity, vec![initial_organ.to_string()], Vec::new())];
+        let mut queue = vec![(
+            initial_organ.to_string(),
+            severity,
+            vec![initial_organ.to_string()],
+            Vec::new(),
+        )];
         let mut visited = HashMap::new();
 
         while let Some((organ, sev, path, mediators)) = queue.pop() {

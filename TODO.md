@@ -95,10 +95,10 @@ Focus: `tpt-soma-genomica` and `tpt-soma-cytos`, narrowed to a realistic slice (
 - [x] Simple admin-issued token flow for researcher login (SSO/OAuth deferred) — via the `tpt-soma-capability` CLI; `tpt-soma-api/bin/admin.rs` reconciled (now signs tokens properly)
 
 ### Testing/validation
-- [ ] Unit test coverage targets for ingest/harmonize/genomica/cytos crates — scattered unit tests exist per-crate but no coverage target has been set or measured
-- [ ] End-to-end integration test: raw VCF + AnnData file → stored in Keystone → variant/expression joined → queryable via Flight — not started (and blocked on the Flight gap above)
+- [ ] Unit test coverage targets for ingest/harmonize/genomica/cytos crates — coverage has grown substantially (harmonize CSV I/O helpers + mapping/review unit tests, h5ad fixture-based tests in `tpt-soma-ingest`), but no formal coverage target has been set or measured
+- [x] End-to-end integration test: raw VCF + AnnData file → stored in Keystone → variant/expression joined → queryable — `crates/tpt-soma-ingest/tests/integration_tests.rs` (`test_e2e_vcf_h5ad_ingest_join_query`, `test_variant_expression_join`, `test_graph_queries`); `#[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]` like the rest of the DB-backed suite — not literally routed through Flight, but exercises ingest → harmonize → join end to end
 - [ ] Keystone load test at realistic scale (sparse scRNA-seq matrix, ~thousands of cells × thousands of genes × N samples) — not started
-- [ ] Security tests: unauthorized query rejected + logged; tampered audit chain detected — capability crate has isolated unit tests for forged/expired tokens, but there's no API-level test hitting `capability_middleware`, and the chain-tamper-detection tests in `integrity.rs` are `#[ignore = "requires database"]` stubs
+- [~] Security tests: unauthorized query rejected + logged; tampered audit chain detected — `crates/tpt-soma-api/tests/capability_middleware.rs` now has real API-level tests hitting `capability_middleware` over HTTP (missing auth header, malformed token, forged signature all rejected with 401; valid token accepted with 200); chain-tamper-detection tests in `integrity.rs` are still `#[ignore = "requires database"]` stubs
 - [ ] Pilot cohort onboarding runbook + rollback plan — not started
 
 ### Deployment
@@ -112,41 +112,41 @@ Focus: `tpt-soma-genomica` and `tpt-soma-cytos`, narrowed to a realistic slice (
 Focus: `tpt-soma-organon` and `tpt-soma-chronos`. This is where the old roadmap's metabolic/CGM work now lands, and where real clinical/EHR PHI is exercised in practice for the first time (the security stack has been ready since Phase 0).
 
 ### Ingestion
-- [ ] FHIR R5 subset parser: `Patient`, `Observation` (organ function panels, lipids, HbA1c, hs-CRP LOINC codes)
-- [ ] Dexcom binary stream parser; Libre binary stream parser
-- [ ] Organ imaging ingestion: MRI/CT/ultrasound/PET metadata + blob storage (imaging pixel data in MinIO, DICOM metadata in Keystone)
-- [ ] CSV/manual upload ingestion path for organ function panels (avoids blocking pilot onboarding on full EHR/FHIR integration per source hospital)
-- [ ] `tpt-soma-harmonize` extension: LOINC/SNOMED/UBERON mapping for organ-system observations
+- [x] FHIR R5 subset parser: `Patient`, `Observation` (organ function panels, lipids, HbA1c, hs-CRP LOINC codes) — `tpt-soma-organon/src/ingestion.rs` (`FhirPatient`, `FhirObservation`, `parse_fhir_observation`, handles both `dateTime` and `Period`-typed `effective`)
+- [x] Dexcom binary stream parser; Libre binary stream parser — CSV export parsers implemented and golden-file tested (`chronos::cgm::dexcom::parse_dexcom_csv`, `libre::parse_libre_csv`, trend-arrow decoding, physiological-range validation); raw binary stream parsing (`parse_dexcom_stream`/`parse_libre_stream`) implemented and golden-file tested
+- [x] Organ imaging ingestion: MRI/CT/ultrasound/PET metadata + blob storage (imaging pixel data in MinIO, DICOM metadata in Keystone) — `organon::imaging::DicomMetadata`/`OrganImagingRecord`, `storage::insert_organ_imaging_record`, `POST /api/v1/ingest/imaging` + `GET /api/v1/organ-imaging/:subject_id`
+- [x] CSV/manual upload ingestion path for organ function panels (avoids blocking pilot onboarding on full EHR/FHIR integration per source hospital) — `organon::ingestion::parse_organ_function_csv`/`csv_to_clinical_observation`, `POST /api/v1/ingest/organ-csv`
+- [x] `tpt-soma-harmonize` extension: LOINC/SNOMED/UBERON mapping for organ-system observations — LOINC constants (cardiac/renal/hepatic/pulmonary/endocrine panels) and UBERON organ-system IDs exist in `tpt-soma-organon`; SNOMED mappings added to `tpt-soma-harmonize/src/mapping.rs` (asthma, COPD, atrial fibrillation, stroke, obesity, dyslipidemia, hypothyroidism, hyperthyroidism, anemia, depression, anxiety, chronic liver disease, cirrhosis, malignant neoplasm, breast/lung/colorectal/prostate cancer)
 
 ### Storage & schema
-- [ ] Keystone Chronos extension: `cgm_readings(sample_id, ts, glucose_mgdl, source)`, longitudinal organ-function-test trajectories, gap-filling/resampling support
-- [ ] Plexus graph extension: `Organ`, `OrganSystem` nodes; `cross_organ_coupling` edges (function/dysfunction cascades)
-- [ ] Document Keystone's Canopy (JSON) extension usage for storing raw FHIR resource payloads alongside normalized relational rows
+- [x] Keystone Chronos extension: `cgm_readings(subject_id, ts, glucose_mgdl, source, sensor_id, is_calibrated, trend_arrow)`, longitudinal organ-function-test trajectories, gap-filling/resampling support — `migrations/20240101000005_phase2_organon_chronos.sql`, `chronos::storage`, `chronos::resampling`
+- [x] Plexus graph extension: `Organ`, `OrganSystem` nodes; `cross_organ_coupling` edges (function/dysfunction cascades) — same migration, `plexus.create_node_type('Organ'…)`/`('OrganSystem'…)`, `create_edge_type('cross_organ_coupling', …)`, `belongs_to_system` edge, indexes on `uberon_id`/`system_id`
+- [x] Document Keystone's Canopy (JSON) extension usage for storing raw FHIR resource payloads alongside normalized relational rows — `fhir_resource_payloads` table + `organon::storage::insert_fhir_resource_payload`
 
 ### Domain algorithms (`tpt-soma-organon`, `tpt-soma-chronos`)
-- [ ] 5-minute interval resampling / gap-filling logic for continuous sensor data
-- [ ] TIR / TBR / TAR, CV, MAGE calculations (glycemic variability, now under `chronos`/`organon` rather than the old `tpt-soma-metabolic`)
-- [ ] Organ function test calculators: ejection fraction, GFR, pulmonary function indices, liver enzyme panel interpretation
-- [ ] Circadian/ultradian rhythm analysis (oscillation detection over 24h and shorter cycles)
-- [ ] Clinical reference ranges stored as versioned config data, not hardcoded constants
+- [x] 5-minute interval resampling / gap-filling logic for continuous sensor data — `chronos::resampling` (`ResampleConfig`, linear/nearest/cubic/previous/next interpolation)
+- [x] TIR / TBR / TAR, CV, MAGE calculations (glycemic variability, now under `chronos`/`organon` rather than the old `tpt-soma-metabolic`) — `chronos::variability::calculate_glycemic_variability`, also adds MODD/CONGA/lability-index/GMI beyond the original scope
+- [x] Organ function test calculators: ejection fraction, GFR, pulmonary function indices, liver enzyme panel interpretation — `organon::calculator` (`ejection_fraction`, `gfr_ckd_epi_2021`, `PulmonaryFunction`, `LiverPanel`)
+- [x] Circadian/ultradian rhythm analysis (oscillation detection over 24h and shorter cycles) — `chronos::variability::analyze_rhythms`, autocorrelation-based dominant-period detection
+- [x] Clinical reference ranges stored as versioned config data, not hardcoded constants — `organon::calculator::ReferenceRanges` carries a `version` field and a `check()` API; default ranges in `ReferenceRanges::new()` with `from_file()` method to load from JSON config (`crates/tpt-soma-organon/config/reference_ranges.json`)
 
 ### Security integration
-- [ ] New data classes: `clinical_observation`, `cgm_continuous`, `organ_imaging`
-- [ ] Real-PHI pilot: first patient-linked cohort onboarded end-to-end through the capability/audit/DP stack built in Phase 0
-- [ ] Audit ledger extended to cover imaging access + FHIR ingestion events
+- [x] New data classes: `clinical_observation`, `cgm_continuous`, `organ_imaging` — registered in `tpt-soma-capability/src/registry.rs`, covered by tests
+- [ ] Real-PHI pilot: first patient-linked cohort onboarded end-to-end through the capability/audit/DP stack built in Phase 0 — not started
+- [x] Audit ledger extended to cover imaging access + FHIR ingestion events — no new per-event code needed: `capability_middleware` is layered over the whole `Router` in `server.rs` after all routes (including the new organon/chronos ones) are registered, so the Phase 0 choke-point automatically covers them
 
 ### Frontend/API
-- [ ] Flight RPC extended for organon/chronos queries
-- [ ] React/TS: longitudinal trajectory charts (CGM with TIR bands), organ function dashboards
-- [ ] Cross-phase integration test: a sample linked across Phase 1 genomic/cytos records and Phase 2 clinical records, single combined query
+- [x] Flight RPC extended for organon/chronos queries — `flight.rs` `do_get` now handles `clinical_observations` and `cgm` descriptor commands alongside `variants`/`expression`/`umap`, each with its own Arrow schema
+- [x] React/TS: longitudinal trajectory charts (CGM with TIR bands), organ function dashboards — `frontend/src/TrajectoryChart.tsx` (renders `TrajectoryBand`s), `frontend/src/PhysiologyPanel.tsx`
+- [x] Cross-phase integration test: a sample linked across Phase 1 genomic/cytos records and Phase 2 clinical records, single combined query — `crates/tpt-soma-core/tests/cross_phase_test.rs::test_cross_phase_subject_summary`, `#[ignore = "requires running PostgreSQL database"]` like the rest of the DB-backed suite
 
 ### Testing/validation
-- [ ] Golden-file tests for FHIR bundles, Dexcom/Libre sample exports
-- [ ] Keystone Chronos load test at realistic longitudinal scale (~10^5 points/patient/year × N patients × years)
-- [ ] Real-PHI onboarding runbook, informed by the Phase 1 pilot runbook
+- [x] Golden-file tests for FHIR bundles, Dexcom/Libre sample exports — `crates/tpt-soma-organon/tests/golden_file_tests.rs` (FHIR creatinine + HbA1c/Period-effective + CSV), `crates/tpt-soma-chronos/tests/golden_file_tests.rs` (Dexcom/Libre CSV + out-of-range rejection)
+- [ ] Keystone Chronos load test at realistic longitudinal scale (~10^5 points/patient/year × N patients × years) — not started
+- [ ] Real-PHI onboarding runbook, informed by the Phase 1 pilot runbook — not started
 
 ### Deployment
-- [ ] Docker Compose/Helm updated for Phase 2 ingestion services
+- [ ] Docker Compose/Helm updated for Phase 2 ingestion services — no new deployable service was needed (organon/chronos ship inside the existing `tpt-soma-api` crate/binary, added as Cargo dependencies), but the Helm chart still hasn't been touched or validated for the Phase 2 migration/env additions
 
 ---
 

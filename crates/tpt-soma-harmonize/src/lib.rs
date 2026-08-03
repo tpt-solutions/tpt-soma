@@ -3,7 +3,7 @@ pub mod mapping;
 pub mod review;
 
 pub use io::{export_queue_to_csv, import_csv_mappings};
-pub use mapping::MappingTable;
+pub use mapping::{MappingEntry, MappingTable, OntologySource};
 pub use review::{ReviewQueue, Unmapped};
 
 use thiserror::Error;

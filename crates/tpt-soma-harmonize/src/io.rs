@@ -1,4 +1,4 @@
-use crate::{MappingTable, ReviewQueue, Result};
+use crate::{MappingTable, OntologySource, Result, ReviewQueue};
 use std::io::{Read, Write};
 use std::path::Path;
 
@@ -53,6 +53,9 @@ pub fn export_queue_to_csv<W: Write>(queue: &ReviewQueue, writer: W) -> Result<(
 /// Import resolved mappings from a CSV reader, applying each non-empty
 /// `resolved_mapping` to the mapping table and dropping the identifier from the
 /// review queue. Returns the number of mappings applied.
+///
+/// The CSV should have columns: identifier,source,resolved_mapping
+/// The source column is used to determine the OntologySource.
 pub fn import_csv_mappings<R: Read>(
     reader: R,
     table: &mut MappingTable,
@@ -63,9 +66,14 @@ pub fn import_csv_mappings<R: Read>(
     for record in reader.records() {
         let record = record?;
         let identifier = record.get(0).unwrap_or("").to_string();
+        let source_str = record.get(1).unwrap_or("").to_string();
         let resolved = record.get(2).unwrap_or("").to_string();
         if !resolved.is_empty() {
-            table.insert(identifier.clone(), resolved.clone());
+            // Parse the source string to OntologySource
+            let source = source_str
+                .parse::<OntologySource>()
+                .unwrap_or(OntologySource::Other);
+            table.insert_simple(source, identifier.clone(), resolved.clone());
             queue.pending.retain(|u| u.identifier != identifier);
             imported += 1;
         }
@@ -116,10 +124,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("mapping.json");
         let mut table = MappingTable::new();
-        table.insert("1:999:G:A", "rs999");
+        table.insert_simple(OntologySource::DbSNP, "1:999:G:A", "rs999");
         save_mapping_table(&path, &table).unwrap();
         let loaded = load_mapping_table(&path).unwrap();
-        assert_eq!(loaded.resolve("1:999:G:A"), Some("rs999"));
+        assert_eq!(
+            loaded.resolve(OntologySource::DbSNP, "1:999:G:A"),
+            Some("rs999")
+        );
     }
 
     #[test]
@@ -132,20 +143,23 @@ mod tests {
 
         let mut table = MappingTable::new();
         let mut queue = sample_queue();
-        let imported =
-            import_csv_mappings(Cursor::new(csv), &mut table, &mut queue).unwrap();
+        let imported = import_csv_mappings(Cursor::new(csv), &mut table, &mut queue).unwrap();
         // Neither row had a resolved mapping, so nothing is imported.
         assert_eq!(imported, 0);
         assert_eq!(queue.pending.len(), 2);
 
         // Now with resolved values.
-        let csv_with_mappings = "identifier,source,resolved_mapping\n1:999:G:A,dbSNP,rs999\n1:1000:C:T,ClinVar,\n";
+        let csv_with_mappings =
+            "identifier,source,resolved_mapping\n1:999:G:A,dbSNP,rs999\n1:1000:C:T,ClinVar,\n";
         let mut table = MappingTable::new();
         let mut queue = sample_queue();
         let imported =
             import_csv_mappings(Cursor::new(csv_with_mappings), &mut table, &mut queue).unwrap();
         assert_eq!(imported, 1);
-        assert_eq!(table.resolve("1:999:G:A"), Some("rs999"));
+        assert_eq!(
+            table.resolve(OntologySource::DbSNP, "1:999:G:A"),
+            Some("rs999")
+        );
         assert_eq!(queue.pending.len(), 1);
         assert_eq!(queue.pending[0].identifier, "1:1000:C:T");
     }
