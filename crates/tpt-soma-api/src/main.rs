@@ -71,6 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let store = ObjectStoreClient::from_env();
     let mut registry = DataClassRegistry::default();
     registry.seed_phase0();
+    registry.seed_phase2();
 
     let (verifying_key, _signing_key) = match args.capability_root_key_path {
         Some(ref path) => {

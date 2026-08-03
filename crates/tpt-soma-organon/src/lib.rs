@@ -8,6 +8,7 @@ pub mod calculator;
 pub mod imaging;
 pub mod ingestion;
 pub mod organ_system;
+pub mod storage;
 
 use thiserror::Error;
 
@@ -73,6 +74,8 @@ pub mod organ_systems {
 
 #[cfg(test)]
 mod tests {
+    use super::OrganonError;
+    
     #[test]
     fn test_organon_error_display() {
         let err = OrganonError::Calculation("test".to_string());

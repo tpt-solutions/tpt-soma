@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tpt_soma_audit::{AuditEvent, AuditLedger};
 use tpt_soma_capability::{CapabilityToken, RevocationList};
 use tpt_soma_core::connection::PgPool;
+use tpt_soma_core::store::ObjectStoreClient;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -19,6 +20,7 @@ pub struct AuthState {
     pub revocation_list: Arc<RevocationList>,
     pub audit_ledger: Arc<AuditLedger>,
     pub dp_service: Arc<tokio::sync::Mutex<tpt_soma_core::DifferentialPrivacyService>>,
+    pub object_store: Arc<ObjectStoreClient>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

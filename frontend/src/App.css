@@ -305,3 +305,124 @@ tr:hover td {
   text-align: center;
   color: #999;
 }
+
+.physiology-panel {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.physiology-panel h2 {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.physiology-panel .hint {
+  color: #999;
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.physiology-inputs {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.physiology-inputs input {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  min-width: 160px;
+}
+
+.physiology-inputs button {
+  padding: 10px 20px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.physiology-inputs button:hover:not(:disabled) {
+  background: #1565c0;
+}
+
+.physiology-inputs button:disabled {
+  background: #90caf9;
+  cursor: not-allowed;
+}
+
+.physiology-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.trajectory-chart {
+  padding: 16px;
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.trajectory-chart-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.trajectory-chart-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.trajectory-chart-refrange {
+  font-size: 12px;
+  color: #898781;
+}
+
+.trajectory-chart-tooltip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #52514e;
+}
+
+.variability-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.variability-metric {
+  padding: 10px 12px;
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.variability-metric .value {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.variability-metric .label {
+  display: block;
+  font-size: 11px;
+  color: #898781;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}

@@ -1,6 +1,5 @@
 //! Cross-organ coupling analysis and organ system graph
 
-use crate::{OrganonError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 

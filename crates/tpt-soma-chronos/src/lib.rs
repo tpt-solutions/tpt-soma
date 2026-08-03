@@ -5,6 +5,7 @@
 
 pub mod cgm;
 pub mod resampling;
+pub mod storage;
 pub mod trajectory;
 pub mod variability;
 

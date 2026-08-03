@@ -28,6 +28,10 @@ pub enum ApiError {
     DifferentialPrivacy(#[from] BudgetError),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("organon error: {0}")]
+    Organon(#[from] tpt_soma_organon::OrganonError),
+    #[error("chronos error: {0}")]
+    Chronos(#[from] tpt_soma_chronos::ChronosError),
 }
 
 impl IntoResponse for ApiError {
@@ -53,6 +57,14 @@ impl IntoResponse for ApiError {
             ApiError::Io(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("IO error: {}", e),
+            ),
+            ApiError::Organon(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Organon error: {}", e),
+            ),
+            ApiError::Chronos(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Chronos error: {}", e),
             ),
         };
 

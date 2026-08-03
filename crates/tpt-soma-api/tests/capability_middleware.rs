@@ -36,12 +36,15 @@ async fn build_test_app() -> Result<(Router, SocketAddr), Box<dyn std::error::Er
         1.0,
     )));
 
+    let object_store = Arc::new(tpt_soma_core::store::ObjectStoreClient::from_env());
+
     let auth_state = Arc::new(AuthState {
         pool,
         verifying_key,
         revocation_list,
         audit_ledger,
         dp_service,
+        object_store,
     });
 
     let app = Router::new()

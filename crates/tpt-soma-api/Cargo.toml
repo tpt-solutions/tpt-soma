@@ -39,6 +39,10 @@ tpt-soma-audit = { path = "../tpt-soma-audit" }
 tpt-soma-genomica = { path = "../tpt-soma-genomica" }
 tpt-soma-cytos = { path = "../tpt-soma-cytos" }
 tpt-soma-ingest = { path = "../tpt-soma-ingest" }
+tpt-soma-organon = { path = "../tpt-soma-organon" }
+tpt-soma-chronos = { path = "../tpt-soma-chronos" }
+csv = { workspace = true }
+md5 = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

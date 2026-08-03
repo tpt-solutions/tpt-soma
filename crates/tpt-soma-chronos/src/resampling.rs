@@ -189,36 +189,44 @@ pub fn fill_gaps(
     while i < timestamps.len() {
         let gap = timestamps[i] - timestamps[i - 1];
         if gap > max_gap && gap <= max_gap * 10 {
-            // Fill this gap
-            let num_points = (gap.num_minutes() / 5) as usize; // 5-min intervals
-            let t0 = timestamps[i - 1];
-            let t1 = timestamps[i];
-            let v0 = values[i - 1];
-            let v1 = values[i];
+            // Fill this gap with 5-minute intervals
+            // Number of intermediate points = (gap_minutes / 5) - 1
+            // e.g., 20 min gap -> 3 points at 5, 10, 15 min
+            let gap_minutes = gap.num_minutes();
+            let num_points = (gap_minutes / 5).saturating_sub(1) as usize;
+            
+            if num_points > 0 {
+                let t0 = timestamps[i - 1];
+                let _t1 = timestamps[i];
+                let v0 = values[i - 1];
+                let v1 = values[i];
 
-            let mut new_times = Vec::new();
-            let mut new_values = Vec::new();
+                let mut new_times = Vec::new();
+                let mut new_values = Vec::new();
 
-            for j in 1..=num_points {
-                let ratio = j as f64 / (num_points + 1) as f64;
-                let new_time = t0 + Duration::minutes((gap.num_minutes() as f64 * ratio) as i64);
-                let new_value = match method {
-                    GapFillMethod::Linear => v0 + ratio * (v1 - v0),
-                    GapFillMethod::ForwardFill => v0,
-                    GapFillMethod::BackwardFill => v1,
-                    GapFillMethod::Mean => (v0 + v1) / 2.0,
-                };
-                new_times.push(new_time);
-                new_values.push(new_value);
+                for j in 1..=num_points {
+                    let ratio = j as f64 / (num_points + 1) as f64;
+                    let new_time = t0 + Duration::minutes((gap_minutes as f64 * ratio) as i64);
+                    let new_value = match method {
+                        GapFillMethod::Linear => v0 + ratio * (v1 - v0),
+                        GapFillMethod::ForwardFill => v0,
+                        GapFillMethod::BackwardFill => v1,
+                        GapFillMethod::Mean => (v0 + v1) / 2.0,
+                    };
+                    new_times.push(new_time);
+                    new_values.push(new_value);
+                }
+
+                // Insert at position i
+                for (t, v) in new_times.into_iter().zip(new_values).rev() {
+                    timestamps.insert(i, t);
+                    values.insert(i, v);
+                }
+
+                i += num_points + 1;
+            } else {
+                i += 1;
             }
-
-            // Insert at position i
-            for (t, v) in new_times.into_iter().zip(new_values).rev() {
-                timestamps.insert(i, t);
-                values.insert(i, v);
-            }
-
-            i += num_points + 1;
         } else {
             i += 1;
         }

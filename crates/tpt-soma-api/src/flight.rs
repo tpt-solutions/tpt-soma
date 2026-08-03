@@ -1,4 +1,4 @@
-use arrow_array::{Float64Array, Int32Array, RecordBatch, StringArray};
+use arrow_array::{BooleanArray, Float64Array, Int32Array, RecordBatch, StringArray};
 use arrow_flight::flight_service_server::FlightServiceServer;
 use arrow_ipc::writer::StreamWriter;
 use arrow_schema::{DataType, Field, Schema};
@@ -7,7 +7,10 @@ use std::sync::Arc;
 use thiserror::Error;
 use tonic::transport::Server;
 use tpt_soma_core::connection::PgPool;
-use tpt_soma_core::query::{get_expression_by_sample, get_umap_by_sample, get_variants_by_sample};
+use tpt_soma_core::query::{
+    get_cgm_readings_by_subject, get_clinical_observations_by_subject, get_expression_by_sample,
+    get_umap_by_sample, get_variants_by_sample,
+};
 
 #[derive(Debug, Error)]
 pub enum FlightError {
@@ -118,6 +121,23 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
                 Field::new("umap2", DataType::Float64, false),
                 Field::new("cluster", DataType::Utf8, false),
             ])),
+            "clinical_observations" => Arc::new(Schema::new(vec![
+                Field::new("subject_id", DataType::Utf8, false),
+                Field::new("loinc_code", DataType::Utf8, false),
+                Field::new("value", DataType::Float64, false),
+                Field::new("unit", DataType::Utf8, true),
+                Field::new("effective_time", DataType::Utf8, false),
+                Field::new("status", DataType::Utf8, false),
+                Field::new("source", DataType::Utf8, false),
+            ])),
+            "cgm" => Arc::new(Schema::new(vec![
+                Field::new("subject_id", DataType::Utf8, false),
+                Field::new("ts", DataType::Utf8, false),
+                Field::new("glucose_mgdl", DataType::Float64, false),
+                Field::new("source", DataType::Utf8, false),
+                Field::new("sensor_id", DataType::Utf8, true),
+                Field::new("is_calibrated", DataType::Boolean, false),
+            ])),
             _ => return Err(tonic::Status::invalid_argument("Unknown data type")),
         };
 
@@ -176,6 +196,28 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
                 },
                 "umap" => match get_umap_by_sample(&pool, &sample_id).await {
                     Ok(records) => match umap_to_batch(records) {
+                        Ok(batch) => match batch_to_flight_data(batch) {
+                            Ok(flight_data) => Ok(flight_data),
+                            Err(e) => Err(tonic::Status::internal(e.to_string())),
+                        },
+                        Err(e) => Err(tonic::Status::internal(e.to_string())),
+                    },
+                    Err(e) => Err(tonic::Status::internal(e.to_string())),
+                },
+                "clinical_observations" => {
+                    match get_clinical_observations_by_subject(&pool, &sample_id).await {
+                        Ok(records) => match clinical_observations_to_batch(records) {
+                            Ok(batch) => match batch_to_flight_data(batch) {
+                                Ok(flight_data) => Ok(flight_data),
+                                Err(e) => Err(tonic::Status::internal(e.to_string())),
+                            },
+                            Err(e) => Err(tonic::Status::internal(e.to_string())),
+                        },
+                        Err(e) => Err(tonic::Status::internal(e.to_string())),
+                    }
+                }
+                "cgm" => match get_cgm_readings_by_subject(&pool, &sample_id).await {
+                    Ok(records) => match cgm_to_batch(records) {
                         Ok(batch) => match batch_to_flight_data(batch) {
                             Ok(flight_data) => Ok(flight_data),
                             Err(e) => Err(tonic::Status::internal(e.to_string())),
@@ -396,6 +438,124 @@ fn umap_to_batch(
     .map_err(|e| FlightError::Arrow(e.to_string()))
 }
 
+fn clinical_observations_to_batch(
+    records: Vec<tpt_soma_core::query::ClinicalObservationRecord>,
+) -> Result<RecordBatch, FlightError> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("subject_id", DataType::Utf8, false),
+        Field::new("loinc_code", DataType::Utf8, false),
+        Field::new("value", DataType::Float64, false),
+        Field::new("unit", DataType::Utf8, true),
+        Field::new("effective_time", DataType::Utf8, false),
+        Field::new("status", DataType::Utf8, false),
+        Field::new("source", DataType::Utf8, false),
+    ]));
+
+    let subject_ids = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.subject_id.clone()))
+            .collect::<Vec<_>>(),
+    );
+    let loinc_codes = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.loinc_code.clone()))
+            .collect::<Vec<_>>(),
+    );
+    let values = Float64Array::from(records.iter().map(|r| Some(r.value)).collect::<Vec<_>>());
+    let units = StringArray::from(records.iter().map(|r| r.unit.clone()).collect::<Vec<_>>());
+    let effective_times = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.effective_time.to_rfc3339()))
+            .collect::<Vec<_>>(),
+    );
+    let statuses = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.status.clone()))
+            .collect::<Vec<_>>(),
+    );
+    let sources = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.source.clone()))
+            .collect::<Vec<_>>(),
+    );
+
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(subject_ids),
+            Arc::new(loinc_codes),
+            Arc::new(values),
+            Arc::new(units),
+            Arc::new(effective_times),
+            Arc::new(statuses),
+            Arc::new(sources),
+        ],
+    )
+    .map_err(|e| FlightError::Arrow(e.to_string()))
+}
+
+fn cgm_to_batch(
+    records: Vec<tpt_soma_core::query::CgmReadingRecord>,
+) -> Result<RecordBatch, FlightError> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("subject_id", DataType::Utf8, false),
+        Field::new("ts", DataType::Utf8, false),
+        Field::new("glucose_mgdl", DataType::Float64, false),
+        Field::new("source", DataType::Utf8, false),
+        Field::new("sensor_id", DataType::Utf8, true),
+        Field::new("is_calibrated", DataType::Boolean, false),
+    ]));
+
+    let subject_ids = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.subject_id.clone()))
+            .collect::<Vec<_>>(),
+    );
+    let timestamps = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.ts.to_rfc3339()))
+            .collect::<Vec<_>>(),
+    );
+    let glucose = Float64Array::from(
+        records
+            .iter()
+            .map(|r| Some(r.glucose_mgdl))
+            .collect::<Vec<_>>(),
+    );
+    let sources = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.source.clone()))
+            .collect::<Vec<_>>(),
+    );
+    let sensor_ids = StringArray::from(
+        records.iter().map(|r| r.sensor_id.clone()).collect::<Vec<_>>(),
+    );
+    let is_calibrated = BooleanArray::from(
+        records.iter().map(|r| Some(r.is_calibrated)).collect::<Vec<_>>(),
+    );
+
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(subject_ids),
+            Arc::new(timestamps),
+            Arc::new(glucose),
+            Arc::new(sources),
+            Arc::new(sensor_ids),
+            Arc::new(is_calibrated),
+        ],
+    )
+    .map_err(|e| FlightError::Arrow(e.to_string()))
+}
+
 fn batch_to_flight_data(batch: RecordBatch) -> Result<arrow_flight::FlightData, FlightError> {
     let mut buffer = Vec::new();
     {
@@ -417,8 +577,6 @@ fn batch_to_flight_data(batch: RecordBatch) -> Result<arrow_flight::FlightData, 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[tokio::test]
     #[ignore = "requires flight server"]
     async fn test_flight_server() {

@@ -1,7 +1,7 @@
 //! Glycemic variability calculations: TIR, TBR, TAR, CV, MAGE
 
 use crate::{ChronosError, Result};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 
 /// Glycemic variability metrics
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -388,7 +388,7 @@ mod tests {
     fn test_calculate_glycemic_variability() {
         let readings: Vec<f64> = (0..288).map(|i| 100.0 + 20.0 * (i as f64 * 0.1).sin()).collect();
         let timestamps: Vec<DateTime<Utc>> = (0..288)
-            .map(|i| Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap() + Duration::minutes(i * 5))
+            .map(|i| Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap() + chrono::Duration::minutes(i * 5))
             .collect();
 
         let period_start = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();

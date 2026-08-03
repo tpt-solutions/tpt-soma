@@ -2,6 +2,7 @@
 target/
 **/*.rs.bk
 *.pdb
+*.profraw
 Cargo.lock
 
 # Node / frontend

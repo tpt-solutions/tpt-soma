@@ -92,8 +92,6 @@ pub enum IntegrityError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[tokio::test]
     #[ignore = "requires database"]
     async fn test_verify_chain_empty() {

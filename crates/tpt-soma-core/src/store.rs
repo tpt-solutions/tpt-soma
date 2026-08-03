@@ -27,6 +27,10 @@ impl ObjectStoreClient {
         }
     }
 
+    pub fn bucket(&self) -> &str {
+        &self.bucket
+    }
+
     fn put_url(&self, key: &str) -> String {
         format!("{}/{}/{}", self.endpoint, self.bucket, key)
     }

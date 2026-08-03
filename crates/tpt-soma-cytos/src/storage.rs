@@ -99,24 +99,6 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
-    fn create_test_umap() -> NamedTempFile {
-        let mut file = NamedTempFile::new().unwrap();
-        writeln!(file, "cell_id,UMAP1,UMAP2").unwrap();
-        writeln!(file, "cell_1,1.0,2.0").unwrap();
-        writeln!(file, "cell_2,3.0,4.0").unwrap();
-        file.flush().unwrap();
-        file
-    }
-
-    fn create_test_labels() -> NamedTempFile {
-        let mut file = NamedTempFile::new().unwrap();
-        writeln!(file, "cell_id,leiden").unwrap();
-        writeln!(file, "cell_1,0").unwrap();
-        writeln!(file, "cell_2,1").unwrap();
-        file.flush().unwrap();
-        file
-    }
-
     #[tokio::test]
     #[ignore = "requires database"]
     async fn test_ingest_scanpy_output() {
