@@ -1,9 +1,27 @@
 use csv::ReaderBuilder;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use tpt_soma_core::connection::Result;
 use tpt_soma_ingest::h5ad::ScRNASeqRecord;
+
+/// Parse a Scanpy cluster-labels CSV (`cell_id,cluster`) into a map. Rows that
+/// fail to decode are skipped rather than aborting the whole ingest.
+pub fn build_cluster_map(labels: impl Read) -> HashMap<String, String> {
+    let mut labels_reader = ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(labels);
+    let mut cluster_map = HashMap::new();
+    for result in labels_reader.records() {
+        if let Ok(record) = result {
+            let cell_id = record.get(0).unwrap_or("").to_string();
+            let cluster = record.get(1).unwrap_or("").to_string();
+            cluster_map.insert(cell_id, cluster);
+        }
+    }
+    cluster_map
+}
 
 pub async fn ingest_scanpy_output(
     pool: &PgPool,
@@ -18,22 +36,10 @@ pub async fn ingest_scanpy_output(
         .has_headers(true)
         .from_reader(BufReader::new(umap_file));
 
-    // Read cluster labels
+    // Build cluster map from cluster labels
     let labels_file = File::open(labels_path)
         .map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
-    let mut labels_reader = ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(BufReader::new(labels_file));
-
-    // Build cluster map
-    let mut cluster_map = std::collections::HashMap::new();
-    for result in labels_reader.records() {
-        let record =
-            result.map_err(|e| tpt_soma_core::connection::CoreError::Pool(e.to_string()))?;
-        let cell_id = record.get(0).unwrap_or("").to_string();
-        let cluster = record.get(1).unwrap_or("").to_string();
-        cluster_map.insert(cell_id, cluster);
-    }
+    let cluster_map = build_cluster_map(BufReader::new(labels_file));
 
     // Insert UMAP coordinates with cluster info
     for result in umap_reader.records() {
@@ -96,8 +102,40 @@ pub async fn ingest_expression_matrix(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
+    use std::io::Cursor;
+
+    #[test]
+    fn build_cluster_map_parses_labels() {
+        let csv = "cell_id,cluster\ncell-1,0\ncell-2,1\ncell-3,0\n";
+        let map = build_cluster_map(Cursor::new(csv));
+        assert_eq!(map.get("cell-1").map(String::as_str), Some("0"));
+        assert_eq!(map.get("cell-2").map(String::as_str), Some("1"));
+        assert_eq!(map.get("cell-3").map(String::as_str), Some("0"));
+        assert_eq!(map.len(), 3);
+    }
+
+    #[test]
+    fn build_cluster_map_handles_missing_cluster_column() {
+        let csv = "cell_id,cluster\ncell-1,\ncell-2,3\n";
+        let map = build_cluster_map(Cursor::new(csv));
+        assert_eq!(map.get("cell-1").map(String::as_str), Some(""));
+        assert_eq!(map.get("cell-2").map(String::as_str), Some("3"));
+    }
+
+    #[test]
+    fn build_cluster_map_skips_ragged_rows() {
+        let csv = "cell_id,cluster\ncell-1\ncell-2,3\n";
+        let map = build_cluster_map(Cursor::new(csv));
+        assert!(map.get("cell-1").is_none());
+        assert_eq!(map.get("cell-2").map(String::as_str), Some("3"));
+        assert_eq!(map.len(), 1);
+    }
+
+    #[test]
+    fn build_cluster_map_empty_input() {
+        let map = build_cluster_map(Cursor::new("cell_id,cluster\n"));
+        assert!(map.is_empty());
+    }
 
     #[tokio::test]
     #[ignore = "requires database"]

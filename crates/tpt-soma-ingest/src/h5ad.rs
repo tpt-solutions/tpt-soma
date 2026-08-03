@@ -238,3 +238,53 @@ impl AnnDataResult {
         self.records.len()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_int_array_4_byte() {
+        // [1u32, 2u32, 3u32] little-endian
+        let raw: Vec<u8> = vec![1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0];
+        assert_eq!(AnnDataParser::decode_int_array(&raw).unwrap(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn decode_int_array_8_byte() {
+        // [1u64, 300u64] little-endian
+        let mut raw: Vec<u8> = Vec::new();
+        raw.extend_from_slice(&1u64.to_le_bytes());
+        raw.extend_from_slice(&300u64.to_le_bytes());
+        assert_eq!(AnnDataParser::decode_int_array(&raw).unwrap(), vec![1, 300]);
+    }
+
+    #[test]
+    fn decode_usize_array_4_byte() {
+        // 5 entries (20 bytes) is not divisible by 8, so width is 4
+        let raw: Vec<u8> = vec![0, 2, 4, 5, 7]
+            .into_iter()
+            .flat_map(|v| (v as u32).to_le_bytes())
+            .collect();
+        assert_eq!(
+            AnnDataParser::decode_usize_array(&raw).unwrap(),
+            vec![0, 2, 4, 5, 7]
+        );
+    }
+
+    #[test]
+    fn decode_usize_array_8_byte() {
+        let mut raw: Vec<u8> = Vec::new();
+        raw.extend_from_slice(&0usize.to_le_bytes());
+        raw.extend_from_slice(&7usize.to_le_bytes());
+        assert_eq!(AnnDataParser::decode_usize_array(&raw).unwrap(), vec![0, 7]);
+    }
+
+    #[test]
+    fn decode_int_array_truncated_returns_empty() {
+        // The width heuristic is length-based only, so a truncated (3-byte)
+        // buffer decodes as 0 elements of the inferred width. Documenting the
+        // current lenient behavior rather than silently assuming an error.
+        assert_eq!(AnnDataParser::decode_int_array(&[1, 2, 3]).unwrap(), Vec::<u32>::new());
+    }
+}

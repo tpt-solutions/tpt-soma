@@ -1,6 +1,8 @@
+pub mod io;
 pub mod mapping;
 pub mod review;
 
+pub use io::{export_queue_to_csv, import_csv_mappings};
 pub use mapping::MappingTable;
 pub use review::{ReviewQueue, Unmapped};
 
@@ -18,6 +20,8 @@ pub enum HarmonizeError {
     Io(#[from] std::io::Error),
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("csv error: {0}")]
+    Csv(#[from] csv::Error),
 }
 
 pub type Error = HarmonizeError;

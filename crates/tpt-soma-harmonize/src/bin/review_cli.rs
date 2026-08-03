@@ -1,7 +1,9 @@
 use clap::{Parser, Subcommand};
-use std::fs;
 use std::path::PathBuf;
-use tpt_soma_harmonize::{MappingTable, ReviewQueue, Unmapped};
+use tpt_soma_harmonize::io::{export_queue_to_csv, import_csv_mappings};
+use tpt_soma_harmonize::io::{load_mapping_table, load_queue};
+use tpt_soma_harmonize::io::{save_mapping_table, save_queue};
+use tpt_soma_harmonize::{Unmapped};
 
 #[derive(Parser)]
 #[command(
@@ -67,38 +69,6 @@ enum Commands {
     },
 }
 
-fn load_queue(path: &PathBuf) -> anyhow::Result<ReviewQueue> {
-    if path.exists() {
-        let content = fs::read_to_string(path)?;
-        Ok(serde_json::from_str(&content)?)
-    } else {
-        Ok(ReviewQueue {
-            pending: Vec::new(),
-        })
-    }
-}
-
-fn save_queue(path: &PathBuf, queue: &ReviewQueue) -> anyhow::Result<()> {
-    let content = serde_json::to_string_pretty(queue)?;
-    fs::write(path, content)?;
-    Ok(())
-}
-
-fn load_mapping_table(path: &PathBuf) -> anyhow::Result<MappingTable> {
-    if path.exists() {
-        let content = fs::read_to_string(path)?;
-        Ok(serde_json::from_str(&content)?)
-    } else {
-        Ok(MappingTable::new())
-    }
-}
-
-fn save_mapping_table(path: &PathBuf, table: &MappingTable) -> anyhow::Result<()> {
-    let content = serde_json::to_string_pretty(table)?;
-    fs::write(path, content)?;
-    Ok(())
-}
-
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
@@ -161,12 +131,8 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Export { queue, output } => {
             let review_queue = load_queue(&queue)?;
-            let mut writer = csv::Writer::from_path(&output)?;
-            writer.write_record(["identifier", "source", "resolved_mapping"])?;
-            for unmapped in &review_queue.pending {
-                writer.write_record([&unmapped.identifier, &unmapped.source, ""])?;
-            }
-            writer.flush()?;
+            let file = std::fs::File::create(&output)?;
+            export_queue_to_csv(&review_queue, file)?;
             println!(
                 "Exported {} items to {}",
                 review_queue.pending.len(),
@@ -180,21 +146,8 @@ fn main() -> anyhow::Result<()> {
         } => {
             let mut review_queue = load_queue(&queue)?;
             let mut table = load_mapping_table(&mapping_table)?;
-            let mut reader = csv::Reader::from_path(&input)?;
-            let mut imported = 0;
-
-            for result in reader.records() {
-                let record = result?;
-                let identifier = record.get(0).unwrap_or("").to_string();
-                let _source = record.get(1).unwrap_or("").to_string();
-                let resolved = record.get(2).unwrap_or("").to_string();
-
-                if !resolved.is_empty() {
-                    table.insert(identifier.clone(), resolved.clone());
-                    review_queue.pending.retain(|u| u.identifier != identifier);
-                    imported += 1;
-                }
-            }
+            let file = std::fs::File::open(&input)?;
+            let imported = import_csv_mappings(file, &mut table, &mut review_queue)?;
 
             save_queue(&queue, &review_queue)?;
             save_mapping_table(&mapping_table, &table)?;

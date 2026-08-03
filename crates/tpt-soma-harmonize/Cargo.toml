@@ -18,6 +18,7 @@ sqlx = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
+tempfile = { workspace = true }
 
 [[bin]]
 name = "review-cli"

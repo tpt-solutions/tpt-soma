@@ -48,6 +48,7 @@ impl ScanpyOrchestrator {
     }
 }
 
+#[derive(Debug)]
 pub struct ScanpyResult {
     pub output_path: String,
 }
@@ -119,5 +120,12 @@ mod tests {
         assert!(content.contains("scanpy"));
         assert!(content.contains("umap"));
         assert!(content.contains("leiden"));
+    }
+
+    #[test]
+    fn test_orchestrator_missing_script() {
+        let orchestrator = ScanpyOrchestrator::new("/definitely/not/a/real/script.py");
+        let err = orchestrator.run("in.h5ad", "out").unwrap_err();
+        assert!(matches!(err, ScanpyError::ScriptNotFound(_)));
     }
 }

@@ -1,6 +1,6 @@
 use arrow_array::{BooleanArray, Float64Array, Int32Array, RecordBatch, StringArray};
 use arrow_flight::flight_service_server::FlightServiceServer;
-use arrow_ipc::writer::StreamWriter;
+use arrow_ipc::writer::{DictionaryTracker, IpcDataGenerator, IpcWriteContext, IpcWriteOptions};
 use arrow_schema::{DataType, Field, Schema};
 use bytes::Bytes;
 use std::sync::Arc;
@@ -173,63 +173,56 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
 
         let pool = self.pool.clone();
         tokio::spawn(async move {
-            let result: Result<arrow_flight::FlightData, tonic::Status> = match data_type.as_str() {
-                "variants" => match get_variants_by_sample(&pool, &sample_id).await {
-                    Ok(records) => match variants_to_batch(records) {
-                        Ok(batch) => match batch_to_flight_data(batch) {
-                            Ok(flight_data) => Ok(flight_data),
-                            Err(e) => Err(tonic::Status::internal(e.to_string())),
-                        },
+            // Each result is (schema FlightData, batch FlightData) per the Flight
+            // wire protocol: the schema must be sent as its own message before
+            // any record batches so standard clients (pyarrow.flight, arrow-rs)
+            // can reassemble the stream.
+            let result: Result<(arrow_flight::FlightData, arrow_flight::FlightData), tonic::Status> =
+                match data_type.as_str() {
+                    "variants" => match get_variants_by_sample(&pool, &sample_id).await {
+                        Ok(records) => variants_to_batch(records)
+                            .and_then(flight_data_from_batch)
+                            .map_err(|e| tonic::Status::internal(e.to_string())),
                         Err(e) => Err(tonic::Status::internal(e.to_string())),
                     },
-                    Err(e) => Err(tonic::Status::internal(e.to_string())),
-                },
-                "expression" => match get_expression_by_sample(&pool, &sample_id).await {
-                    Ok(records) => match expression_to_batch(records) {
-                        Ok(batch) => match batch_to_flight_data(batch) {
-                            Ok(flight_data) => Ok(flight_data),
-                            Err(e) => Err(tonic::Status::internal(e.to_string())),
-                        },
+                    "expression" => match get_expression_by_sample(&pool, &sample_id).await {
+                        Ok(records) => expression_to_batch(records)
+                            .and_then(flight_data_from_batch)
+                            .map_err(|e| tonic::Status::internal(e.to_string())),
                         Err(e) => Err(tonic::Status::internal(e.to_string())),
                     },
-                    Err(e) => Err(tonic::Status::internal(e.to_string())),
-                },
-                "umap" => match get_umap_by_sample(&pool, &sample_id).await {
-                    Ok(records) => match umap_to_batch(records) {
-                        Ok(batch) => match batch_to_flight_data(batch) {
-                            Ok(flight_data) => Ok(flight_data),
-                            Err(e) => Err(tonic::Status::internal(e.to_string())),
-                        },
+                    "umap" => match get_umap_by_sample(&pool, &sample_id).await {
+                        Ok(records) => umap_to_batch(records)
+                            .and_then(flight_data_from_batch)
+                            .map_err(|e| tonic::Status::internal(e.to_string())),
                         Err(e) => Err(tonic::Status::internal(e.to_string())),
                     },
-                    Err(e) => Err(tonic::Status::internal(e.to_string())),
-                },
-                "clinical_observations" => {
-                    match get_clinical_observations_by_subject(&pool, &sample_id).await {
-                        Ok(records) => match clinical_observations_to_batch(records) {
-                            Ok(batch) => match batch_to_flight_data(batch) {
-                                Ok(flight_data) => Ok(flight_data),
-                                Err(e) => Err(tonic::Status::internal(e.to_string())),
-                            },
+                    "clinical_observations" => {
+                        match get_clinical_observations_by_subject(&pool, &sample_id).await {
+                            Ok(records) => clinical_observations_to_batch(records)
+                                .and_then(flight_data_from_batch)
+                                .map_err(|e| tonic::Status::internal(e.to_string())),
                             Err(e) => Err(tonic::Status::internal(e.to_string())),
-                        },
-                        Err(e) => Err(tonic::Status::internal(e.to_string())),
+                        }
                     }
-                }
-                "cgm" => match get_cgm_readings_by_subject(&pool, &sample_id).await {
-                    Ok(records) => match cgm_to_batch(records) {
-                        Ok(batch) => match batch_to_flight_data(batch) {
-                            Ok(flight_data) => Ok(flight_data),
-                            Err(e) => Err(tonic::Status::internal(e.to_string())),
-                        },
+                    "cgm" => match get_cgm_readings_by_subject(&pool, &sample_id).await {
+                        Ok(records) => cgm_to_batch(records)
+                            .and_then(flight_data_from_batch)
+                            .map_err(|e| tonic::Status::internal(e.to_string())),
                         Err(e) => Err(tonic::Status::internal(e.to_string())),
                     },
-                    Err(e) => Err(tonic::Status::internal(e.to_string())),
-                },
-                _ => Err(tonic::Status::invalid_argument("Unknown data type")),
-            };
+                    _ => Err(tonic::Status::invalid_argument("Unknown data type")),
+                };
 
-            let _ = tx.send(result).await;
+            match result {
+                Ok((schema_flight_data, batch_flight_data)) => {
+                    let _ = tx.send(Ok(schema_flight_data)).await;
+                    let _ = tx.send(Ok(batch_flight_data)).await;
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                }
+            }
         });
 
         Ok(tonic::Response::new(
@@ -556,30 +549,121 @@ fn cgm_to_batch(
     .map_err(|e| FlightError::Arrow(e.to_string()))
 }
 
+fn flight_data_from_batch(
+    batch: RecordBatch,
+) -> Result<(arrow_flight::FlightData, arrow_flight::FlightData), FlightError> {
+    let schema_flight_data = schema_to_flight_data(batch.schema())?;
+    let batch_flight_data = batch_to_flight_data(batch)?;
+    Ok((schema_flight_data, batch_flight_data))
+}
+
+fn schema_to_flight_data(schema: Arc<Schema>) -> Result<arrow_flight::FlightData, FlightError> {
+    let data_gen = IpcDataGenerator::default();
+    let mut tracker = DictionaryTracker::new(false);
+    let encoded = data_gen.schema_to_bytes_with_dictionary_tracker(
+        &schema,
+        &mut tracker,
+        &IpcWriteOptions::default(),
+    );
+    Ok(arrow_flight::FlightData {
+        data_header: Bytes::from(encoded.ipc_message),
+        data_body: Bytes::from(encoded.arrow_data),
+        ..Default::default()
+    })
+}
+
 fn batch_to_flight_data(batch: RecordBatch) -> Result<arrow_flight::FlightData, FlightError> {
-    let mut buffer = Vec::new();
-    {
-        let mut writer = StreamWriter::try_new(&mut buffer, batch.schema().as_ref())
-            .map_err(|e| FlightError::Arrow(e.to_string()))?;
-        writer
-            .write(&batch)
-            .map_err(|e| FlightError::Arrow(e.to_string()))?;
-        writer
-            .finish()
-            .map_err(|e| FlightError::Arrow(e.to_string()))?;
-    }
+    let data_gen = IpcDataGenerator::default();
+    let mut tracker = DictionaryTracker::new(false);
+    let mut write_context = IpcWriteContext::default();
+    let (_, encoded) = data_gen
+        .encode(
+            &batch,
+            &mut tracker,
+            &IpcWriteOptions::default(),
+            &mut write_context,
+        )
+        .map_err(|e| FlightError::Arrow(e.to_string()))?;
 
     Ok(arrow_flight::FlightData {
-        data_body: Bytes::from(buffer),
+        data_header: Bytes::from(encoded.ipc_message),
+        data_body: Bytes::from(encoded.arrow_data),
         ..Default::default()
     })
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use arrow_array::RecordBatch;
+
+    fn sample_variant_batch() -> RecordBatch {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("variant_id", DataType::Utf8, false),
+            Field::new("chromosome", DataType::Utf8, false),
+            Field::new("position", DataType::Int32, false),
+            Field::new("reference", DataType::Utf8, false),
+            Field::new("alternate", DataType::Utf8, false),
+            Field::new("rsid", DataType::Utf8, true),
+            Field::new("clinvar_id", DataType::Utf8, true),
+            Field::new("genotype", DataType::Utf8, true),
+        ]));
+
+        let variant_ids = StringArray::from(vec!["1:100:A:T", "2:300:T:A"]);
+        let chromosomes = StringArray::from(vec!["1", "2"]);
+        let positions = Int32Array::from(vec![100, 300]);
+        let references = StringArray::from(vec!["A", "T"]);
+        let alternates = StringArray::from(vec!["T", "A"]);
+        let rsids = StringArray::from(vec![Some("rs123"), None]);
+        let clinvar_ids = StringArray::from(vec![Some("VCV000123"), None]);
+        let genotypes = StringArray::from(vec![Some("0/1"), None]);
+
+        RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(variant_ids),
+                Arc::new(chromosomes),
+                Arc::new(positions),
+                Arc::new(references),
+                Arc::new(alternates),
+                Arc::new(rsids),
+                Arc::new(clinvar_ids),
+                Arc::new(genotypes),
+            ],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_flight_data_round_trip() {
+        let batch = sample_variant_batch();
+        let (schema_data, batch_data) = flight_data_from_batch(batch.clone()).unwrap();
+
+        // The schema message must be carried in the header so standard clients
+        // (pyarrow.flight, arrow-flight Rust decoder) can reassemble the stream.
+        assert!(!schema_data.data_header.is_empty());
+        assert!(!batch_data.data_header.is_empty());
+
+        // Decode with the standard arrow-flight decoder and compare.
+        let decoded =
+            arrow_flight::utils::flight_data_to_batches(&[schema_data, batch_data]).unwrap();
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].num_rows(), batch.num_rows());
+        assert_eq!(decoded[0].schema(), batch.schema());
+
+        let variants = decoded[0]
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(variants.value(0), "1:100:A:T");
+        assert_eq!(variants.value(1), "2:300:T:A");
+    }
+
     #[tokio::test]
-    #[ignore = "requires flight server"]
+    #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
     async fn test_flight_server() {
-        // Integration test would go here
+        // Full server round-trip (do_get over the wire) is covered by the
+        // end-to-end integration test in tests/e2e_flight.rs
     }
 }

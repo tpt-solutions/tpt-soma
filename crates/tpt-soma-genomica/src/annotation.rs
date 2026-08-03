@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VariantAnnotation {
     pub rsid: Option<String>,
     pub clinvar: Option<String>,
@@ -87,5 +87,49 @@ mod tests {
         h.add_gene_mapping("BRCA1".to_string(), "HGNC:1100".to_string());
         assert_eq!(h.harmonize_gene("BRCA1"), Some("HGNC:1100".to_string()));
         assert_eq!(h.harmonize_gene("TP53"), None);
+    }
+
+    #[test]
+    fn test_annotation_store_get_missing_is_none() {
+        let store = VariantAnnotationStore::new();
+        assert!(store.is_empty());
+        assert_eq!(store.get("1:100:A:T"), None);
+    }
+
+    #[test]
+    fn test_annotation_store_overwrite_and_count() {
+        let mut store = VariantAnnotationStore::new();
+        store.annotate(
+            "1:100:A:T",
+            VariantAnnotation {
+                rsid: Some("rs123".to_string()),
+                clinvar: None,
+            },
+        );
+        store.annotate(
+            "1:100:A:T",
+            VariantAnnotation {
+                rsid: Some("rs999".to_string()),
+                clinvar: Some("VCV000999".to_string()),
+            },
+        );
+        store.annotate(
+            "2:300:T:A",
+            VariantAnnotation {
+                rsid: None,
+                clinvar: None,
+            },
+        );
+        assert_eq!(store.len(), 2);
+        let annotation = store.get("1:100:A:T").unwrap();
+        assert_eq!(annotation.rsid.as_deref(), Some("rs999"));
+        assert_eq!(annotation.clinvar.as_deref(), Some("VCV000999"));
+    }
+
+    #[test]
+    fn test_harmonizer_default_is_empty() {
+        let h = Harmonizer::default();
+        assert_eq!(h.harmonize_variant("1:100:A:T"), None);
+        assert_eq!(h.harmonize_gene("BRCA1"), None);
     }
 }
