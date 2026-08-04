@@ -154,7 +154,7 @@ pub async fn capability_middleware(
     Ok(response)
 }
 
-fn compute_query_fingerprint(req: &Request) -> String {
+pub fn compute_query_fingerprint(req: &Request) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(req.method().as_str().as_bytes());

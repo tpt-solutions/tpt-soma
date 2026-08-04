@@ -69,11 +69,11 @@ impl CapabilityToken {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Payload {
-    subject: String,
-    resource_class: String,
-    cohort_scope: Vec<String>,
-    action: String,
-    expiry: u64,
-    nonce: Vec<u8>,
+pub struct Payload {
+    pub subject: String,
+    pub resource_class: String,
+    pub cohort_scope: Vec<String>,
+    pub action: String,
+    pub expiry: u64,
+    pub nonce: Vec<u8>,
 }
