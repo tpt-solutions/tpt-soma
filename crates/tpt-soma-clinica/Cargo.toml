@@ -1,33 +1,26 @@
 [package]
-name = "tpt-soma-organon"
+name = "tpt-soma-clinica"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.97.0"
 license.workspace = true
 authors.workspace = true
+description = "Clinical trial design, cohort discovery, and biomarker discovery/validation statistics."
+readme = "README.md"
+keywords = ['clinical', 'trial', 'biomarker', 'epidemiology']
+categories = ['science']
 repository.workspace = true
 homepage.workspace = true
-description = "Organ function, FHIR/CSV ingestion, imaging metadata, and clinical calculators."
-readme = "README.md"
-keywords = ['clinical', 'fhir', 'physiology', 'calculators']
-categories = ['science']
 
 [dependencies]
 tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
 tpt-soma-capability = { path = "../tpt-soma-capability", version = "0.1.0" }
 tpt-soma-audit = { path = "../tpt-soma-audit", version = "0.1.0" }
-tpt-soma-harmonize = { path = "../tpt-soma-harmonize", version = "0.1.0" }
-tpt-soma-chronos = { path = "../tpt-soma-chronos", version = "0.1.0" }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 sqlx = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
-csv = { workspace = true }
-
-[dev-dependencies]
-tempfile = { workspace = true }

@@ -2,8 +2,15 @@
 name = "tpt-soma-audit"
 version = "0.1.0"
 edition = "2024"
-description = "Append-only hash-chained audit ledger over Keystone"
-authors = ["tpt-soma contributors"]
+rust-version = "1.97.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Append-only, hash-chained compliance audit ledger."
+readme = "README.md"
+keywords = ['audit', 'compliance', 'hipaa', 'gdpr', 'ledger']
+categories = ['cryptography', 'science']
 
 [[bin]]
 name = "tpt-soma-audit"
@@ -22,7 +29,7 @@ tracing = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 clap = { workspace = true }
-tpt-soma-core = { path = "../tpt-soma-core" }
+tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -31,4 +38,4 @@ chrono = { workspace = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-tpt-soma-core = { path = "../tpt-soma-core" }
+tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }

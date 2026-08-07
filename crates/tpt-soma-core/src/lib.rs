@@ -1,5 +1,6 @@
 pub mod connection;
 pub mod dp;
+pub mod federated;
 pub mod migrations;
 pub mod query;
 pub mod store;

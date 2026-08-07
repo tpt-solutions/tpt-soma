@@ -32,7 +32,7 @@ pub struct CalibrationTarget {
     pub target_value: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct SimulationOutput {
     pub id: Uuid,
     pub run_id: Uuid,
@@ -112,6 +112,25 @@ pub async fn insert_simulation_output(pool: &PgPool, o: &SimulationOutput) -> Re
     .await
     .map_err(SimulacrumError::Database)?;
     Ok(())
+}
+
+pub async fn get_simulation_outputs(
+    pool: &PgPool,
+    run_id: Uuid,
+) -> Result<Vec<SimulationOutput>> {
+    let rows = sqlx::query_as::<_, SimulationOutput>(
+        r#"
+        SELECT id, run_id, ts, series_name, value
+        FROM simulation_outputs
+        WHERE run_id = $1
+        ORDER BY ts, series_name
+        "#,
+    )
+    .bind(run_id)
+    .fetch_all(pool)
+    .await
+    .map_err(SimulacrumError::Database)?;
+    Ok(rows)
 }
 
 #[cfg(test)]

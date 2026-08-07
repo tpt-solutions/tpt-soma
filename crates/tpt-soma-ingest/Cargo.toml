@@ -2,8 +2,15 @@
 name = "tpt-soma-ingest"
 version = "0.1.0"
 edition = "2024"
-description = "Source-agnostic ingestion parsers (VCF, AnnData, FHIR, CGM)"
-authors = ["tpt-soma contributors"]
+rust-version = "1.97.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Ingestion parsers for VCF and AnnData/h5ad with checksum-on-write and quarantine."
+readme = "README.md"
+keywords = ['omics', 'vcf', 'scanpy', 'ingestion']
+categories = ['science', 'parser-implementations']
 
 [dependencies]
 tokio = { workspace = true }
@@ -21,17 +28,17 @@ tower-http = { workspace = true }
 noodles = { workspace = true }
 anndata = { workspace = true }
 hdf5-reader = "0.9"
-tpt-soma-core = { path = "../tpt-soma-core" }
+tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
 md5 = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = { workspace = true }
-tpt-soma-harmonize = { path = "../tpt-soma-harmonize" }
-tpt-soma-genomica = { path = "../tpt-soma-genomica" }
-tpt-soma-core = { path = "../tpt-soma-core" }
-tpt-soma-audit = { path = "../tpt-soma-audit" }
-tpt-soma-capability = { path = "../tpt-soma-capability" }
+tpt-soma-harmonize = { path = "../tpt-soma-harmonize", version = "0.1.0" }
+tpt-soma-genomica = { path = "../tpt-soma-genomica", version = "0.1.0" }
+tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
+tpt-soma-audit = { path = "../tpt-soma-audit", version = "0.1.0" }
+tpt-soma-capability = { path = "../tpt-soma-capability", version = "0.1.0" }
 sqlx = { workspace = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }

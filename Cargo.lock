@@ -5233,15 +5233,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "tpt-soma-clinica"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.19",
+ "tpt-soma-audit",
+ "tpt-soma-capability",
+ "tpt-soma-core",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "tpt-soma-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "hex",
+ "hmac",
  "md5",
  "rand 0.8.7",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "thiserror 2.0.19",
  "tokio",
@@ -5378,6 +5398,17 @@ dependencies = [
  "tpt-soma-core",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "tpt-soma-sandbox"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tpt-soma-capability",
 ]
 
 [[package]]

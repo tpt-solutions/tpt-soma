@@ -2,13 +2,20 @@
 name = "tpt-soma-pathos"
 version = "0.1.0"
 edition = "2024"
-license = "AGPL-3.0-or-later"
-repository = "https://github.com/tpt-soma/tpt-soma"
+rust-version = "1.97.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Computational pathology: metabolic/endocrine, oncology, longevity, and cardiovascular models."
+readme = "README.md"
+keywords = ['pathology', 'metabolic', 'oncology', 'endocrinology']
+categories = ['science']
 
 [dependencies]
-tpt-soma-core = { path = "../tpt-soma-core" }
-tpt-soma-capability = { path = "../tpt-soma-capability" }
-tpt-soma-audit = { path = "../tpt-soma-audit" }
+tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
+tpt-soma-capability = { path = "../tpt-soma-capability", version = "0.1.0" }
+tpt-soma-audit = { path = "../tpt-soma-audit", version = "0.1.0" }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

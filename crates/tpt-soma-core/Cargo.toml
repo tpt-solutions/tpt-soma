@@ -2,8 +2,15 @@
 name = "tpt-soma-core"
 version = "0.1.0"
 edition = "2024"
-description = "Keystone data-access layer: connection pooling, schema migrations, query helpers"
-authors = ["tpt-soma contributors"]
+rust-version = "1.97.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Keystone connection pooling, SQL migrations, query helpers, and the differential-privacy foundation."
+readme = "README.md"
+keywords = ['physiology', 'postgres', 'differential-privacy', 'keystone']
+categories = ['science', 'database']
 
 [dependencies]
 tokio = { workspace = true }
@@ -17,6 +24,9 @@ tracing = { workspace = true }
 reqwest = { workspace = true }
 md5 = { workspace = true }
 rand = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

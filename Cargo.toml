@@ -13,14 +13,19 @@ members = [
     "crates/tpt-soma-chronos",
     "crates/tpt-soma-simulacrum",
     "crates/tpt-soma-pathos",
+    "crates/tpt-soma-clinica",
+    "crates/tpt-soma-sandbox",
 ]
 exclude = ["frontend"]
 
 [workspace.package]
 edition = "2024"
 rust-version = "1.97.0"
-license = "AGPL-3.0-or-later"
+license = "MIT OR Apache-2.0"
+authors = ["TPT Solutions"]
+description = "tpt-soma: multi-scale computational physiology platform"
 repository = "https://github.com/tpt-soma/tpt-soma"
+homepage = "https://github.com/tpt-soma/tpt-soma"
 
 [workspace.dependencies]
 tokio = { version = "1.43", features = ["full"] }

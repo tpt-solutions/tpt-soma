@@ -2,8 +2,15 @@
 name = "tpt-soma-api"
 version = "0.1.0"
 edition = "2024"
-description = "Arrow Flight RPC service, HTTP API, and frontend integration"
-authors = ["tpt-soma contributors"]
+rust-version = "1.97.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "HTTP + Arrow Flight API server with capability/audit/differential-privacy enforcement."
+readme = "README.md"
+keywords = ['api', 'arrow-flight', 'grpc', 'web', 'physiology']
+categories = ['web-programming', 'science']
 
 [dependencies]
 tokio = { workspace = true }
@@ -33,14 +40,14 @@ tower = { workspace = true }
 tower-http = { workspace = true }
 bytes = { workspace = true }
 sqlx = { workspace = true }
-tpt-soma-core = { path = "../tpt-soma-core" }
-tpt-soma-capability = { path = "../tpt-soma-capability" }
-tpt-soma-audit = { path = "../tpt-soma-audit" }
-tpt-soma-genomica = { path = "../tpt-soma-genomica" }
-tpt-soma-cytos = { path = "../tpt-soma-cytos" }
-tpt-soma-ingest = { path = "../tpt-soma-ingest" }
-tpt-soma-organon = { path = "../tpt-soma-organon" }
-tpt-soma-chronos = { path = "../tpt-soma-chronos" }
+tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
+tpt-soma-capability = { path = "../tpt-soma-capability", version = "0.1.0" }
+tpt-soma-audit = { path = "../tpt-soma-audit", version = "0.1.0" }
+tpt-soma-genomica = { path = "../tpt-soma-genomica", version = "0.1.0" }
+tpt-soma-cytos = { path = "../tpt-soma-cytos", version = "0.1.0" }
+tpt-soma-ingest = { path = "../tpt-soma-ingest", version = "0.1.0" }
+tpt-soma-organon = { path = "../tpt-soma-organon", version = "0.1.0" }
+tpt-soma-chronos = { path = "../tpt-soma-chronos", version = "0.1.0" }
 csv = { workspace = true }
 md5 = { workspace = true }
 

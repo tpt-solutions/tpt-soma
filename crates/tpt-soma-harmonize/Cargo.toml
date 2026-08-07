@@ -2,8 +2,15 @@
 name = "tpt-soma-harmonize"
 version = "0.1.0"
 edition = "2024"
-description = "Deterministic ontology mapping tables + human-in-the-loop review"
-authors = ["tpt-soma contributors"]
+rust-version = "1.97.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Deterministic ontology mapping (dbSNP rsID, HGNC, LOINC, SNOMED) with human-in-the-loop review."
+readme = "README.md"
+keywords = ['harmonization', 'ontology', 'mapping']
+categories = ['science']
 
 [dependencies]
 tokio = { workspace = true }

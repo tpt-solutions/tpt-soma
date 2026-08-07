@@ -234,6 +234,15 @@ const POLICY: &[(&str, &str, &[&str], &str)] = &[
         ],
         "read",
     ),
+    // Phase 3: simulation outputs (digital-twin runs)
+    ("POST", "/api/v1/simulate", &["simulation_output"], "write"),
+    ("GET", "/api/v1/simulations/*", &["simulation_output"], "read"),
+    (
+        "POST",
+        "/api/v1/simulations/*/aggregate/count",
+        &["simulation_output"],
+        "export",
+    ),
 ];
 
 fn path_matches(path: &str, pattern: &str) -> bool {

@@ -2,8 +2,15 @@
 name = "tpt-soma-cytos"
 version = "0.1.0"
 edition = "2024"
-description = "Single-cell transcriptomics domain logic and Scanpy orchestration"
-authors = ["tpt-soma contributors"]
+rust-version = "1.97.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Single-cell RNA-seq (10x/AnnData) Scanpy orchestration and storage."
+readme = "README.md"
+keywords = ['scrna-seq', 'scanpy', 'transcriptomics']
+categories = ['science']
 
 [dependencies]
 tokio = { workspace = true }
@@ -16,11 +23,11 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 csv = "1.3"
 tempfile = { workspace = true }
-tpt-soma-core = { path = "../tpt-soma-core" }
-tpt-soma-capability = { path = "../tpt-soma-capability" }
-tpt-soma-audit = { path = "../tpt-soma-audit" }
-tpt-soma-ingest = { path = "../tpt-soma-ingest" }
-tpt-soma-harmonize = { path = "../tpt-soma-harmonize" }
+tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
+tpt-soma-capability = { path = "../tpt-soma-capability", version = "0.1.0" }
+tpt-soma-audit = { path = "../tpt-soma-audit", version = "0.1.0" }
+tpt-soma-ingest = { path = "../tpt-soma-ingest", version = "0.1.0" }
+tpt-soma-harmonize = { path = "../tpt-soma-harmonize", version = "0.1.0" }
 
 [dev-dependencies]
 tokio-test = "0.4"

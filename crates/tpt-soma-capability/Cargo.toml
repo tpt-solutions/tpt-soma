@@ -2,8 +2,15 @@
 name = "tpt-soma-capability"
 version = "0.1.0"
 edition = "2024"
-description = "Custom Ed25519-signed capability tokens with HMAC-chained caveats"
-authors = ["tpt-soma contributors"]
+rust-version = "1.97.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Custom Ed25519-signed capability-token cryptosystem (capability-based access control)."
+readme = "README.md"
+keywords = ['capability', 'security', 'ed25519', 'access-control', 'cbac']
+categories = ['cryptography', 'authentication']
 
 [[bin]]
 name = "tpt-soma-capability"

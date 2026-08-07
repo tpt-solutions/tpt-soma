@@ -15,6 +15,8 @@ use tpt_soma_core::query::{
 };
 
 use crate::auth::{AuthError, authenticate_bearer};
+use tpt_soma_simulacrum::storage as sim_storage;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum FlightError {
@@ -61,6 +63,7 @@ fn flight_data_type_classes(data_type: &str) -> &'static [&'static str] {
         "expression" | "umap" => &["transcriptomic_scrna"],
         "clinical_observations" => &["clinical_observation"],
         "cgm" => &["cgm_continuous"],
+        "simulation" => &["simulation_output"],
         _ => &[],
     }
 }
@@ -227,6 +230,12 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
                 Field::new("source", DataType::Utf8, false),
                 Field::new("sensor_id", DataType::Utf8, true),
                 Field::new("is_calibrated", DataType::Boolean, false),
+            ])),
+            "simulation" => Arc::new(Schema::new(vec![
+                Field::new("run_id", DataType::Utf8, false),
+                Field::new("ts", DataType::Utf8, false),
+                Field::new("series_name", DataType::Utf8, false),
+                Field::new("value", DataType::Float64, false),
             ])),
             _ => return Err(tonic::Status::invalid_argument("Unknown data type")),
         };

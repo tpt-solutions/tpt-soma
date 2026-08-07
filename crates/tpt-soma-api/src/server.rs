@@ -15,6 +15,8 @@ use tpt_soma_core::DifferentialPrivacyService;
 use tpt_soma_core::connection::PgPool;
 use tpt_soma_core::store::ObjectStoreClient;
 use tpt_soma_ingest::endpoint;
+use tpt_soma_simulacrum::{crosstalk, storage as sim_storage};
+use uuid::Uuid;
 
 use axum::extract::{Multipart, Query};
 use tpt_soma_chronos::{
@@ -141,6 +143,13 @@ impl ApiServer {
             .route(
                 "/api/v1/subjects/:patient_id/cross-phase-summary",
                 get(get_cross_phase_summary),
+            )
+            // Phase 3: simulation run + query + DP aggregate export
+            .route("/api/v1/simulate", post(run_simulation))
+            .route("/api/v1/simulations/:run_id", get(get_simulation))
+            .route(
+                "/api/v1/simulations/:run_id/aggregate/count",
+                post(simulation_aggregate_count),
             )
             .layer(middleware::from_fn_with_state(
                 auth_state.clone(),
@@ -694,6 +703,117 @@ async fn get_cross_phase_summary(
     let summary =
         tpt_soma_core::query::get_cross_phase_subject_summary(&state.pool, &patient_id).await?;
     Ok(axum::Json(summary))
+}
+
+// Phase 3: simulation handlers
+
+#[derive(serde::Deserialize)]
+struct SimulateRequest {
+    subject_id: String,
+    t0: f64,
+    dt: f64,
+    steps: usize,
+    adipose_secretion: f64,
+    igf1_clearance: f64,
+    igf1_growth: f64,
+}
+
+#[axum::debug_handler]
+async fn run_simulation(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Json(payload): axum::extract::Json<SimulateRequest>,
+) -> Result<axum::Json<serde_json::Value>> {
+    if payload.dt <= 0.0 || payload.steps == 0 {
+        return Err(ApiError::BadRequest(
+            "dt must be positive and steps must be > 0".to_string(),
+        ));
+    }
+    let (system, init) = crosstalk::build_adipose_igf1_breast(
+        payload.adipose_secretion,
+        payload.igf1_clearance,
+        payload.igf1_growth,
+    );
+    let traj = system.simulate(payload.t0, &init, payload.dt, payload.steps);
+    let run_id = Uuid::new_v4();
+    let base = chrono::Utc::now();
+    let run = sim_storage::SimulationRun {
+        id: run_id,
+        subject_id: payload.subject_id.clone(),
+        model_name: "adipose_igf1_breast".to_string(),
+        created_at: base,
+        status: "completed".to_string(),
+    };
+    sim_storage::insert_simulation_run(&state.pool, &run)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let series = ["adipose", "igf1", "breast"];
+    for (t, y) in &traj {
+        let ts = base + chrono::Duration::milliseconds((t * 1000.0) as i64);
+        for (j, name) in series.iter().enumerate() {
+            let out = sim_storage::SimulationOutput {
+                id: Uuid::new_v4(),
+                run_id,
+                ts,
+                series_name: name.to_string(),
+                value: y[j],
+            };
+            sim_storage::insert_simulation_output(&state.pool, &out)
+                .await
+                .map_err(|e| ApiError::Internal(e.to_string()))?;
+        }
+    }
+
+    Ok(axum::Json(serde_json::json!({
+        "run_id": run_id,
+        "model": run.model_name,
+        "steps": traj.len(),
+    })))
+}
+
+#[axum::debug_handler]
+async fn get_simulation(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Path(run_id): axum::extract::Path<String>,
+) -> Result<axum::Json<Vec<sim_storage::SimulationOutput>>> {
+    let run_uuid =
+        Uuid::parse_str(&run_id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let outs = sim_storage::get_simulation_outputs(&state.pool, run_uuid)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(axum::Json(outs))
+}
+
+#[derive(serde::Deserialize)]
+struct SimulationAggregateRequest {
+    run_id: String,
+    sensitivity: Option<f64>,
+}
+
+#[axum::debug_handler]
+async fn simulation_aggregate_count(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Json(payload): axum::extract::Json<SimulationAggregateRequest>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let run_uuid =
+        Uuid::parse_str(&payload.run_id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM simulation_outputs WHERE run_id = $1",
+    )
+    .bind(run_uuid)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let sensitivity = payload.sensitivity.unwrap_or(1.0);
+    let mut dp = state.dp_service.lock().await;
+    let noisy = dp
+        .cohort_aggregate_export(&payload.run_id, "simulation", count as usize, sensitivity)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(axum::Json(serde_json::json!({
+        "run_id": payload.run_id,
+        "noisy_count": noisy,
+        "epsilon_spent": sensitivity,
+    })))
 }
 
 async fn metrics_handler() -> impl IntoResponse {
