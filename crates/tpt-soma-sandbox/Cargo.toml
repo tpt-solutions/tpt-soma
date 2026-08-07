@@ -12,9 +12,14 @@ categories = ['cryptography']
 repository.workspace = true
 homepage.workspace = true
 
+[features]
+default = []
+wasmtime-backend = ["dep:wasmtime"]
+
 [dependencies]
 tpt-soma-capability = { path = "../tpt-soma-capability", version = "0.1.0" }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+wasmtime = { version = "47", optional = true }

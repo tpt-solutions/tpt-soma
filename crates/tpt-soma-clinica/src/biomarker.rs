@@ -1,6 +1,6 @@
 //! Biomarker discovery / validation statistics (Phase 4, `tpt-soma-clinica`).
 
-use crate::stats::{mean, sample_variance, pearson_r, welch_t_test};
+use crate::stats::{mean, pearson_r, sample_variance, welch_t_test};
 use crate::{ClinicaError, Result};
 
 /// Result of a biomarker association test.
@@ -55,7 +55,8 @@ pub fn associate_biomarker(values: &[f64], case: &[bool]) -> Result<BiomarkerRes
     let (t, _df, p) = welch_t_test(&cases, &controls)?;
     let nc = cases.len() as f64;
     let nk = controls.len() as f64;
-    let pooled_sd = ((sample_variance(&cases) * (nc - 1.0) + sample_variance(&controls) * (nk - 1.0))
+    let pooled_sd = ((sample_variance(&cases) * (nc - 1.0)
+        + sample_variance(&controls) * (nk - 1.0))
         / (nc + nk - 2.0))
         .sqrt();
     let effect = if pooled_sd > 0.0 {

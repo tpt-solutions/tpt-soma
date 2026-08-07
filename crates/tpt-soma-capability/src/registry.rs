@@ -99,7 +99,8 @@ impl DataClassRegistry {
     pub fn seed_phase3(&mut self) {
         self.register(DataClass {
             id: "simulation_output".to_string(),
-            description: "Digital-twin simulation outputs (trajectories, parameter sets)".to_string(),
+            description: "Digital-twin simulation outputs (trajectories, parameter sets)"
+                .to_string(),
             sensitivity: Sensitivity::Confidential,
         });
     }

@@ -313,6 +313,20 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
                         .map_err(|e| tonic::Status::internal(e.to_string())),
                     Err(e) => Err(tonic::Status::internal(e.to_string())),
                 },
+                "simulation" => match Uuid::parse_str(&sample_id) {
+                    Ok(run_uuid) => {
+                        match sim_storage::get_simulation_outputs(&pool, run_uuid).await {
+                            Ok(records) => simulation_to_batch(records)
+                                .and_then(flight_data_from_batch)
+                                .map_err(|e| tonic::Status::internal(e.to_string())),
+                            Err(e) => Err(tonic::Status::internal(e.to_string())),
+                        }
+                    }
+                    Err(e) => Err(tonic::Status::invalid_argument(format!(
+                        "invalid run_id: {}",
+                        e
+                    ))),
+                },
                 _ => Err(tonic::Status::invalid_argument("Unknown data type")),
             };
 
@@ -657,6 +671,48 @@ fn cgm_to_batch(
     .map_err(|e| FlightError::Arrow(e.to_string()))
 }
 
+fn simulation_to_batch(
+    records: Vec<sim_storage::SimulationOutput>,
+) -> Result<RecordBatch, FlightError> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("run_id", DataType::Utf8, false),
+        Field::new("ts", DataType::Utf8, false),
+        Field::new("series_name", DataType::Utf8, false),
+        Field::new("value", DataType::Float64, false),
+    ]));
+
+    let run_ids = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.run_id.to_string()))
+            .collect::<Vec<_>>(),
+    );
+    let timestamps = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.ts.to_rfc3339()))
+            .collect::<Vec<_>>(),
+    );
+    let series = StringArray::from(
+        records
+            .iter()
+            .map(|r| Some(r.series_name.clone()))
+            .collect::<Vec<_>>(),
+    );
+    let values = Float64Array::from(records.iter().map(|r| Some(r.value)).collect::<Vec<_>>());
+
+    RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(run_ids),
+            Arc::new(timestamps),
+            Arc::new(series),
+            Arc::new(values),
+        ],
+    )
+    .map_err(|e| FlightError::Arrow(e.to_string()))
+}
+
 fn flight_data_from_batch(
     batch: RecordBatch,
 ) -> Result<(arrow_flight::FlightData, arrow_flight::FlightData), FlightError> {
@@ -768,6 +824,39 @@ mod tests {
         assert_eq!(variants.value(1), "2:300:T:A");
     }
 
+    #[test]
+    fn test_simulation_batch_round_trip() {
+        let outputs = vec![
+            sim_storage::SimulationOutput {
+                id: Uuid::new_v4(),
+                run_id: Uuid::new_v4(),
+                ts: chrono::Utc::now(),
+                series_name: "igf1".to_string(),
+                value: 12.5,
+            },
+            sim_storage::SimulationOutput {
+                id: Uuid::new_v4(),
+                run_id: Uuid::new_v4(),
+                ts: chrono::Utc::now(),
+                series_name: "breast".to_string(),
+                value: 3.25,
+            },
+        ];
+        let batch = simulation_to_batch(outputs).unwrap();
+        let (schema_data, batch_data) = flight_data_from_batch(batch.clone()).unwrap();
+        let decoded =
+            arrow_flight::utils::flight_data_to_batches(&[schema_data, batch_data]).unwrap();
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].num_rows(), 2);
+        let series = decoded[0]
+            .column(2)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(series.value(0), "igf1");
+        assert_eq!(series.value(1), "breast");
+    }
+
     #[tokio::test]
     async fn test_flight_authorize_requires_token() {
         let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
@@ -829,6 +918,31 @@ mod tests {
         .await
         .unwrap_err();
         assert_eq!(result.code(), tonic::Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn test_flight_authorize_simulation_data_class() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let verifying_key = key.verifying_key();
+        let revocation_list = Arc::new(RevocationList::new());
+
+        let token = crate::auth::test_helpers::signed_token(
+            &key,
+            "researcher-1",
+            "simulation_output",
+            vec!["cohort-a".to_string()],
+            "read",
+            [1u8; 32],
+        );
+
+        authorize_flight_call(
+            Some(&format!("Bearer {}", token)),
+            &verifying_key,
+            &revocation_list,
+            "simulation",
+        )
+        .await
+        .unwrap();
     }
 
     #[tokio::test]

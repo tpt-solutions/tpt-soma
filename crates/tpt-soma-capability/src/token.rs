@@ -8,6 +8,10 @@ pub struct CapabilityToken {
     pub subject: String,
     pub resource_class: String,
     pub cohort_scope: Vec<String>,
+    /// Optional graph-traversal scope: the OSG node/edge ids a token may touch.
+    /// `None` means the token is not restricted to specific graph entities
+    /// (cohort/resource-class scoping still applies).
+    pub graph_scope: Option<Vec<String>>,
     pub action: String,
     pub expiry: u64,
     pub nonce: Vec<u8>,
@@ -20,6 +24,7 @@ impl CapabilityToken {
             subject: token.subject.clone(),
             resource_class: token.resource_class.clone(),
             cohort_scope: token.cohort_scope.clone(),
+            graph_scope: token.graph_scope.clone(),
             action: token.action.clone(),
             expiry: token.expiry,
             nonce: token.nonce.clone(),
@@ -55,6 +60,7 @@ impl CapabilityToken {
             subject: self.subject.clone(),
             resource_class: self.resource_class.clone(),
             cohort_scope: self.cohort_scope.clone(),
+            graph_scope: self.graph_scope.clone(),
             action: self.action.clone(),
             expiry: self.expiry,
             nonce: self.nonce.clone(),
@@ -68,6 +74,7 @@ pub struct Payload {
     pub subject: String,
     pub resource_class: String,
     pub cohort_scope: Vec<String>,
+    pub graph_scope: Option<Vec<String>>,
     pub action: String,
     pub expiry: u64,
     pub nonce: Vec<u8>,

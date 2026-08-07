@@ -48,6 +48,7 @@ tpt-soma-cytos = { path = "../tpt-soma-cytos", version = "0.1.0" }
 tpt-soma-ingest = { path = "../tpt-soma-ingest", version = "0.1.0" }
 tpt-soma-organon = { path = "../tpt-soma-organon", version = "0.1.0" }
 tpt-soma-chronos = { path = "../tpt-soma-chronos", version = "0.1.0" }
+tpt-soma-simulacrum = { path = "../tpt-soma-simulacrum", version = "0.1.0" }
 csv = { workspace = true }
 md5 = { workspace = true }
 

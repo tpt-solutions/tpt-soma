@@ -22,6 +22,7 @@ fn make_test_token(signing_key: &SigningKey, expiry: u64) -> String {
         expiry,
         nonce: [42u8; 32].to_vec(),
         signature: Vec::new(),
+        graph_scope: None,
     };
     let signed = CapabilityToken::sign(&backend, token);
     serde_json::to_string(&signed).unwrap()
@@ -45,6 +46,7 @@ fn make_test_token_with_params(
         expiry,
         nonce: nonce.to_vec(),
         signature: Vec::new(),
+        graph_scope: None,
     };
     let signed = CapabilityToken::sign(&backend, token);
     serde_json::to_string(&signed).unwrap()
@@ -102,6 +104,7 @@ async fn test_token_verification_expired() {
         expiry,
         nonce: [42u8; 32].to_vec(),
         signature: Vec::new(),
+        graph_scope: None,
     };
     // Manually sign without overwriting expiry
     let payload = tpt_soma_capability::token::Payload {

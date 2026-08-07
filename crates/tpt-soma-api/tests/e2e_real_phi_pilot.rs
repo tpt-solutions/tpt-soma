@@ -40,6 +40,7 @@ fn signed_token(
         expiry: u64::MAX,
         nonce: rand::random::<[u8; 32]>().to_vec(),
         signature: Vec::new(),
+        graph_scope: None,
     };
     let signed = CapabilityToken::sign(&backend, token);
     serde_json::to_string(&signed).unwrap()

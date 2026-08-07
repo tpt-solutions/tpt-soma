@@ -19,6 +19,7 @@ fn make_token() -> CapabilityToken {
         expiry: 9999999999,
         nonce: vec![1, 2, 3, 4],
         signature: Vec::new(),
+        graph_scope: None,
     }
 }
 

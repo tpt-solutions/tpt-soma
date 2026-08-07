@@ -119,6 +119,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 expiry: now + expiry,
                 nonce: rand::random::<[u8; 32]>().to_vec(),
                 signature: Vec::new(),
+                graph_scope: None,
             };
 
             token = CapabilityToken::sign(&backend, token);

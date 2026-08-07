@@ -14,10 +14,10 @@
 use crate::solver::{OdeSystem, State, integrate};
 
 /// Local dynamics closure of a single OSG node: `dy/dt = f(t, y)`.
-pub type NodeLocal = Box<dyn Fn(f64, &[f64], &mut [f64])>;
+pub type NodeLocal = Box<dyn Fn(f64, &[f64], &mut [f64]) + Send + Sync>;
 /// Coupling closure of a `cross_talk` edge: contributes to the downstream
 /// node's derivative given `(t, y_from, y_to)`; length = downstream node dim.
-pub type EdgeCoupling = Box<dyn Fn(f64, &[f64], &[f64]) -> Vec<f64>>;
+pub type EdgeCoupling = Box<dyn Fn(f64, &[f64], &[f64]) -> Vec<f64> + Send + Sync>;
 
 /// A single OSG node with local (uncoupled) dynamics `dy/dt = f(t, y)`.
 pub struct OsNode {

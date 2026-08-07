@@ -39,6 +39,7 @@ impl AttenuatedToken {
             expiry: parent.expiry,
             nonce: child_nonce,
             signature: Vec::new(),
+            graph_scope: None,
         };
         Ok(Self {
             token: child,

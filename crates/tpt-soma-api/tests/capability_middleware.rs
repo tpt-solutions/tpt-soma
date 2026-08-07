@@ -72,6 +72,7 @@ fn make_token(signing_key: &SigningKey) -> String {
         expiry: u64::MAX,
         nonce: [42u8; 32].to_vec(),
         signature: Vec::new(),
+        graph_scope: None,
     };
     let signed = CapabilityToken::sign(&backend, token);
     serde_json::to_string(&signed).unwrap()

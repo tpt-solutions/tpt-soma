@@ -104,6 +104,23 @@ impl DifferentialPrivacyService {
         self.spend_budget(cohort, actor, sensitivity)?;
         Ok(self.noisy_count(count, sensitivity))
     }
+
+    /// Cross-domain aggregate export (ADR 007 §2.8): combine counts drawn from
+    /// multiple Phase 1–4 data classes for a single cohort into one
+    /// differentially-private release. The full cohort epsilon budget is spent
+    /// once for the combined export, and the audit hook fires with the
+    /// `"cross_domain"` marker domain so the spend is attributable.
+    pub fn cross_domain_aggregate_export(
+        &mut self,
+        cohort: &str,
+        actor: &str,
+        domain_counts: &[(String, usize)],
+        sensitivity: f64,
+    ) -> Result<f64, BudgetError> {
+        self.spend_budget(cohort, actor, sensitivity)?;
+        let total: usize = domain_counts.iter().map(|(_, c)| *c).sum();
+        Ok(self.noisy_count(total, sensitivity))
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -181,6 +198,29 @@ mod tests {
             .cohort_aggregate_export("cohort-a", "researcher-1", 100, 0.05)
             .unwrap();
         let result = service.cohort_aggregate_export("cohort-a", "researcher-1", 100, 0.06);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_service_cross_domain_aggregate_export() {
+        let mut service = DifferentialPrivacyService::new(1.0);
+        let domains = vec![
+            ("genomic_variant".to_string(), 100),
+            ("transcriptomic_scrna".to_string(), 50),
+            ("cgm_continuous".to_string(), 25),
+        ];
+        let result = service
+            .cross_domain_aggregate_export("cohort-a", "researcher-1", &domains, 0.1)
+            .unwrap();
+        assert!(result > 0.0);
+    }
+
+    #[test]
+    fn test_service_cross_domain_aggregate_export_budget_exhausted() {
+        let mut service = DifferentialPrivacyService::new(0.05);
+        let domains = vec![("genomic_variant".to_string(), 100)];
+        let result =
+            service.cross_domain_aggregate_export("cohort-a", "researcher-1", &domains, 0.1);
         assert!(result.is_err());
     }
 }

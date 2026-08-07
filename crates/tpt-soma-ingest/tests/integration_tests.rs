@@ -119,6 +119,7 @@ async fn test_e2e_vcf_h5ad_ingest_join_query()
         expiry: u64::MAX,
         nonce: [42u8; 32].to_vec(),
         signature: Vec::new(),
+        graph_scope: None,
     };
 
     let signed_token = CapabilityToken::sign(&backend, token);

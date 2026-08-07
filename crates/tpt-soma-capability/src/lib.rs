@@ -36,6 +36,7 @@ mod tests {
             expiry: u64::MAX,
             nonce: [3u8; 32].to_vec(),
             signature: Vec::new(),
+            graph_scope: None,
         };
 
         let forged_token = CapabilityToken::sign(&other_backend, token);
@@ -54,6 +55,7 @@ mod tests {
             expiry: 0,
             nonce: [4u8; 32].to_vec(),
             signature: Vec::new(),
+            graph_scope: None,
         };
 
         token = CapabilityToken::sign(&backend, token);
@@ -80,6 +82,7 @@ mod tests {
             expiry: requested,
             nonce: [9u8; 32].to_vec(),
             signature: Vec::new(),
+            graph_scope: None,
         };
 
         let signed = CapabilityToken::sign(&backend, token);
@@ -103,6 +106,7 @@ mod tests {
             expiry: u64::MAX,
             nonce: [1u8; 32].to_vec(),
             signature: Vec::new(),
+            graph_scope: None,
         };
 
         let parent = CapabilityToken::sign(&backend, parent);
@@ -132,6 +136,7 @@ mod tests {
             expiry: u64::MAX,
             nonce: [1u8; 32].to_vec(),
             signature: Vec::new(),
+            graph_scope: None,
         };
 
         let parent = CapabilityToken::sign(&backend, parent);
@@ -160,6 +165,7 @@ mod tests {
             expiry: u64::MAX,
             nonce: [2u8; 32].to_vec(),
             signature: Vec::new(),
+            graph_scope: None,
         };
 
         let token = CapabilityToken::sign(&backend, token);

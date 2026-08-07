@@ -61,7 +61,11 @@ pub fn welch_t_test(a: &[f64], b: &[f64]) -> Result<(f64, f64, f64)> {
     let t = (ma - mb) / denom;
     let df_num = (sa + sb).powi(2);
     let df_den = sa.powi(2) / (na - 1.0) + sb.powi(2) / (nb - 1.0);
-    let df = if df_den == 0.0 { na + nb - 2.0 } else { df_num / df_den };
+    let df = if df_den == 0.0 {
+        na + nb - 2.0
+    } else {
+        df_num / df_den
+    };
     let p = 2.0 * (1.0 - normal_cdf(t.abs()));
     Ok((t, df, p.clamp(0.0, 1.0)))
 }

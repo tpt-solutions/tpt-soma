@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import UmapViewer from './UmapViewer';
 import PhysiologyPanel from './PhysiologyPanel';
+import SimulationPanel from './SimulationPanel';
 
 interface Sample {
   sample_id: string;
@@ -260,6 +261,7 @@ function App() {
       </div>
 
       <PhysiologyPanel token={token} />
+      <SimulationPanel token={token} />
     </div>
   );
 }

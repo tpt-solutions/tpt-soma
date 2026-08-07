@@ -114,6 +114,10 @@ impl ApiServer {
                 "/api/v1/ingest/fhir-observation",
                 post(ingest_fhir_observation),
             )
+            .route(
+                "/api/v1/cohorts/:cohort_id/aggregate/cross-domain",
+                post(cross_domain_aggregate_count),
+            )
             .route("/api/v1/ingest/organ-csv", post(ingest_organ_csv))
             .route(
                 "/api/v1/clinical-observations/:subject_id",
@@ -776,8 +780,7 @@ async fn get_simulation(
     axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
     axum::extract::Path(run_id): axum::extract::Path<String>,
 ) -> Result<axum::Json<Vec<sim_storage::SimulationOutput>>> {
-    let run_uuid =
-        Uuid::parse_str(&run_id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let run_uuid = Uuid::parse_str(&run_id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
     let outs = sim_storage::get_simulation_outputs(&state.pool, run_uuid)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -797,13 +800,12 @@ async fn simulation_aggregate_count(
 ) -> Result<axum::Json<serde_json::Value>> {
     let run_uuid =
         Uuid::parse_str(&payload.run_id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let count = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM simulation_outputs WHERE run_id = $1",
-    )
-    .bind(run_uuid)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM simulation_outputs WHERE run_id = $1")
+            .bind(run_uuid)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
     let sensitivity = payload.sensitivity.unwrap_or(1.0);
     let mut dp = state.dp_service.lock().await;
     let noisy = dp
@@ -812,6 +814,75 @@ async fn simulation_aggregate_count(
     Ok(axum::Json(serde_json::json!({
         "run_id": payload.run_id,
         "noisy_count": noisy,
+        "epsilon_spent": sensitivity,
+    })))
+}
+
+#[derive(serde::Deserialize)]
+struct CrossDomainAggregateRequest {
+    cohort_id: String,
+    sensitivity: Option<f64>,
+}
+
+/// Cross-domain aggregate export (ADR 007 §2.8): release a single
+/// differentially-private count that combines multiple Phase 1–4 data classes
+/// (samples, variant records, expression records) for one cohort. The full
+/// cohort epsilon budget is spent once for the combined export.
+#[axum::debug_handler]
+async fn cross_domain_aggregate_count(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Json(payload): axum::extract::Json<CrossDomainAggregateRequest>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let sample_count =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cohort_membership WHERE cohort_id = $1")
+            .bind(&payload.cohort_id)
+            .fetch_one(&state.pool)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let variant_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM sample_variants sv \
+         JOIN cohort_membership cm ON sv.sample_id = cm.sample_id \
+         WHERE cm.cohort_id = $1",
+    )
+    .bind(&payload.cohort_id)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let expression_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM scrna_expression e \
+         JOIN cohort_membership cm ON e.sample_id = cm.sample_id \
+         WHERE cm.cohort_id = $1",
+    )
+    .bind(&payload.cohort_id)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let domains = vec![
+        ("cohort_membership".to_string(), sample_count as usize),
+        ("genomic_variant".to_string(), variant_count as usize),
+        (
+            "transcriptomic_scrna".to_string(),
+            expression_count as usize,
+        ),
+    ];
+
+    let sensitivity = payload.sensitivity.unwrap_or(1.0);
+    let mut dp = state.dp_service.lock().await;
+    let noisy = dp
+        .cross_domain_aggregate_export(&payload.cohort_id, "api", &domains, sensitivity)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(axum::Json(serde_json::json!({
+        "cohort_id": payload.cohort_id,
+        "domain_counts": {
+            "cohort_membership": sample_count,
+            "genomic_variant": variant_count,
+            "transcriptomic_scrna": expression_count,
+        },
+        "noisy_total": noisy,
         "epsilon_spent": sensitivity,
     })))
 }

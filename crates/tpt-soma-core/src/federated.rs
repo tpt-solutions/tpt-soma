@@ -71,6 +71,60 @@ pub fn verify_envelope(key: &[u8], env: &FederatedResultEnvelope) -> bool {
     diff == 0
 }
 
+/// A tamper-evident binding between a federated result envelope and the
+/// central audit ledger's root of trust (its tail `row_hash`). Partner sites
+/// attach this to their envelope so the central site can prove the result was
+/// produced against a known ledger state — the consistency-proof path that
+/// reconciles local-site ledgers against the central ledger (ADR 007 §2.7).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LedgerConsistencyProof {
+    /// Tail `row_hash` of the central audit ledger the envelope is bound to.
+    pub central_ledger_hash: String,
+    /// The envelope's own HMAC, captured so the proof is self-describing.
+    pub envelope_hmac: String,
+    /// HMAC over `(central_ledger_hash || envelope_hmac)` under the scope key.
+    pub proof_hmac: String,
+}
+
+fn compute_proof_hmac(key: &[u8], central_ledger_hash: &str, envelope_hmac: &str) -> String {
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts keys of any size");
+    mac.update(central_ledger_hash.as_bytes());
+    mac.update(envelope_hmac.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+/// Bind `env` to the central ledger's tail hash, producing a consistency proof.
+pub fn prove_ledger_consistency(
+    key: &[u8],
+    central_ledger_hash: &str,
+    env: &FederatedResultEnvelope,
+) -> LedgerConsistencyProof {
+    let proof_hmac = compute_proof_hmac(key, central_ledger_hash, &env.hmac);
+    LedgerConsistencyProof {
+        central_ledger_hash: central_ledger_hash.to_string(),
+        envelope_hmac: env.hmac.clone(),
+        proof_hmac,
+    }
+}
+
+/// Verify a consistency proof against the scope key. Returns `true` only if the
+/// envelope HMAC and central ledger hash in the proof are bound by a valid
+/// HMAC under `key`. (The envelope payload itself is re-verified separately via
+/// [`verify_envelope`] when the site also supplies the payload.)
+pub fn verify_ledger_consistency(key: &[u8], proof: &LedgerConsistencyProof) -> bool {
+    let expected = compute_proof_hmac(key, &proof.central_ledger_hash, &proof.envelope_hmac);
+    if expected.len() != proof.proof_hmac.len() {
+        return false;
+    }
+    let a = expected.as_bytes();
+    let b = proof.proof_hmac.as_bytes();
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,5 +150,32 @@ mod tests {
         let env = sign_envelope(&key, "site-a", "run-1", b"aggregate-weights");
         let wrong = derive_scope_key(b"other-nonce", "site-a");
         assert!(!verify_envelope(&wrong, &env));
+    }
+
+    #[test]
+    fn test_ledger_consistency_proof_roundtrip() {
+        let key = derive_scope_key(b"nonce-bytes", "site-a");
+        let env = sign_envelope(&key, "site-a", "run-1", b"aggregate-weights");
+        let proof = prove_ledger_consistency(&key, "central-tail-hash", &env);
+        assert!(verify_ledger_consistency(&key, &proof));
+        assert_eq!(proof.central_ledger_hash, "central-tail-hash");
+    }
+
+    #[test]
+    fn test_ledger_consistency_fails_on_tampered_ledger_hash() {
+        let key = derive_scope_key(b"nonce-bytes", "site-a");
+        let env = sign_envelope(&key, "site-a", "run-1", b"aggregate-weights");
+        let mut proof = prove_ledger_consistency(&key, "central-tail-hash", &env);
+        proof.central_ledger_hash = "forged-hash".to_string();
+        assert!(!verify_ledger_consistency(&key, &proof));
+    }
+
+    #[test]
+    fn test_ledger_consistency_fails_on_wrong_key() {
+        let key = derive_scope_key(b"nonce-bytes", "site-a");
+        let env = sign_envelope(&key, "site-a", "run-1", b"aggregate-weights");
+        let proof = prove_ledger_consistency(&key, "central-tail-hash", &env);
+        let wrong = derive_scope_key(b"other-nonce", "site-a");
+        assert!(!verify_ledger_consistency(&wrong, &proof));
     }
 }

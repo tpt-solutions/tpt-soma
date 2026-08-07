@@ -165,6 +165,18 @@ const POLICY: &[(&str, &str, &[&str], &str)] = &[
         ],
         "export",
     ),
+    (
+        "POST",
+        "/api/v1/cohorts/*/aggregate/cross-domain",
+        &[
+            "genomic_variant",
+            "transcriptomic_scrna",
+            "clinical_observation",
+            "cgm_continuous",
+            "simulation_output",
+        ],
+        "export",
+    ),
     ("POST", "/api/v1/ingest/vcf", &["genomic_raw"], "write"),
     (
         "POST",
@@ -236,7 +248,12 @@ const POLICY: &[(&str, &str, &[&str], &str)] = &[
     ),
     // Phase 3: simulation outputs (digital-twin runs)
     ("POST", "/api/v1/simulate", &["simulation_output"], "write"),
-    ("GET", "/api/v1/simulations/*", &["simulation_output"], "read"),
+    (
+        "GET",
+        "/api/v1/simulations/*",
+        &["simulation_output"],
+        "read",
+    ),
     (
         "POST",
         "/api/v1/simulations/*/aggregate/count",
@@ -325,6 +342,19 @@ pub fn enforce_route_policy(
     }
 
     Ok(())
+}
+
+/// Enforce a token's optional graph-traversal scope against a concrete OSG
+/// node/edge id. A token without `graph_scope` (i.e. `None`) is not restricted
+/// to specific graph entities; a token with a scope list may only touch ids in
+/// that list (or `*`). This is the building block for graph-traversal-scoped
+/// access (ADR 007 §2.8), applied by graph query endpoints before returning
+/// topology.
+pub fn graph_scope_allows(token: &CapabilityToken, entity_id: &str) -> bool {
+    match &token.graph_scope {
+        None => true,
+        Some(scope) => scope.iter().any(|s| s == "*" || s == entity_id),
+    }
 }
 
 pub async fn capability_middleware(
@@ -451,6 +481,7 @@ pub(crate) mod test_helpers {
             expiry: u64::MAX,
             nonce: nonce.to_vec(),
             signature: Vec::new(),
+            graph_scope: None,
         };
         let signed = CapabilityToken::sign(&backend, token);
         serde_json::to_string(&signed).unwrap()
@@ -470,6 +501,7 @@ mod tests {
             expiry: u64::MAX,
             nonce: vec![1u8; 32],
             signature: Vec::new(),
+            graph_scope: None,
         }
     }
 
@@ -555,5 +587,26 @@ mod tests {
             Some("cohort-b")
         );
         assert_eq!(extract_cohort_id("/api/v1/variants/s1"), None);
+    }
+
+    #[test]
+    fn test_graph_scope_allows_unscoped_token() {
+        let t = token("genomic_variant", "cohort-a", "read");
+        assert!(graph_scope_allows(&t, "any-node"));
+    }
+
+    #[test]
+    fn test_graph_scope_allows_matching_entity() {
+        let mut t = token("genomic_variant", "cohort-a", "read");
+        t.graph_scope = Some(vec!["node-x".to_string()]);
+        assert!(graph_scope_allows(&t, "node-x"));
+        assert!(!graph_scope_allows(&t, "node-y"));
+    }
+
+    #[test]
+    fn test_graph_scope_wildcard_allows_all() {
+        let mut t = token("genomic_variant", "cohort-a", "read");
+        t.graph_scope = Some(vec!["*".to_string()]);
+        assert!(graph_scope_allows(&t, "node-anything"));
     }
 }

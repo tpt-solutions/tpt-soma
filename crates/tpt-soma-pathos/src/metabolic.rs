@@ -45,7 +45,9 @@ pub struct MetabolicSyndromeResult {
 }
 
 /// NCEP ATP III: ≥ 3 of 5 criteria satisfy metabolic syndrome.
-pub fn metabolic_syndrome_assessment(input: &MetabolicSyndromeInput) -> Result<MetabolicSyndromeResult> {
+pub fn metabolic_syndrome_assessment(
+    input: &MetabolicSyndromeInput,
+) -> Result<MetabolicSyndromeResult> {
     let waist = if input.is_female {
         input.waist_cm >= 88.0
     } else {
@@ -57,9 +59,8 @@ pub fn metabolic_syndrome_assessment(input: &MetabolicSyndromeInput) -> Result<M
     } else {
         input.hdl_mgdl < 40.0
     };
-    let blood_pressure = input.on_bp_meds
-        || input.systolic_bp >= 130.0
-        || input.diastolic_bp >= 85.0;
+    let blood_pressure =
+        input.on_bp_meds || input.systolic_bp >= 130.0 || input.diastolic_bp >= 85.0;
     let glucose = input.on_glucose_meds || input.fasting_glucose_mgdl >= 100.0;
 
     let criteria_met = [waist, triglycerides, hdl, blood_pressure, glucose]
@@ -120,7 +121,7 @@ mod tests {
     #[test]
     fn test_metabolic_syndrome_three_criteria_met() {
         let input = MetabolicSyndromeInput {
-            waist_cm: 105.0,        // male -> waist criterion met
+            waist_cm: 105.0, // male -> waist criterion met
             is_female: false,
             triglycerides_mgdl: 160.0,
             hdl_mgdl: 35.0,
