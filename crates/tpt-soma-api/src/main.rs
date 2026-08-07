@@ -1,6 +1,5 @@
 use clap::{Parser, ValueHint};
 use prometheus::{Encoder, TextEncoder};
-use rand::RngCore;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tpt_soma_api::server::ApiServer;
@@ -72,23 +71,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut registry = DataClassRegistry::default();
     registry.seed_phase0();
     registry.seed_phase2();
+    registry.seed_phase3();
+    registry.seed_phase4();
 
-    let (verifying_key, _signing_key) = match args.capability_root_key_path {
-        Some(ref path) => {
-            let key_data = std::fs::read(path)?;
-            let signing_key = ed25519_dalek::SigningKey::from_bytes(
-                &key_data.try_into().map_err(|_| "invalid key length")?,
-            );
-            (signing_key.verifying_key(), Some(signing_key))
-        }
-        None => {
-            let mut csprng = rand::thread_rng();
-            let mut key_bytes = [0u8; 32];
-            csprng.fill_bytes(&mut key_bytes);
-            let signing_key = ed25519_dalek::SigningKey::from_bytes(&key_bytes);
-            (signing_key.verifying_key(), Some(signing_key))
-        }
-    };
+    let signing_key =
+        tpt_soma_api::secrets::load_signing_key(args.capability_root_key_path.as_deref())?;
+    let verifying_key = signing_key.verifying_key();
 
     let revocation_list = Arc::new(RevocationList::new());
     let audit_ledger = Arc::new(AuditLedger::new(pool.clone()));

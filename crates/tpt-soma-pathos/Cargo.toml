@@ -1,0 +1,19 @@
+[package]
+name = "tpt-soma-pathos"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/tpt-soma/tpt-soma"
+
+[dependencies]
+tpt-soma-core = { path = "../tpt-soma-core" }
+tpt-soma-capability = { path = "../tpt-soma-capability" }
+tpt-soma-audit = { path = "../tpt-soma-audit" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+sqlx = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }

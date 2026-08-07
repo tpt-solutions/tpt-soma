@@ -122,7 +122,7 @@ mod tests {
     fn build_cluster_map_skips_ragged_rows() {
         let csv = "cell_id,cluster\ncell-1\ncell-2,3\n";
         let map = build_cluster_map(Cursor::new(csv));
-        assert!(map.get("cell-1").is_none());
+        assert!(!map.contains_key("cell-1"));
         assert_eq!(map.get("cell-2").map(String::as_str), Some("3"));
         assert_eq!(map.len(), 1);
     }

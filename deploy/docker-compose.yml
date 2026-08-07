@@ -45,7 +45,6 @@ services:
     container_name: tpt-soma-api
     ports:
       - "8080:8080"
-      - "8815:8815"
     environment:
       - DATABASE_URL=postgres://${TPT_AUTH_BOOTSTRAP_USER:-admin}:${POSTGRES_PASSWORD:-postgres}@keystone:5432/tpt_soma
       - MINIO_ENDPOINT=minio:9000
@@ -83,9 +82,12 @@ services:
     environment:
       - DATABASE_URL=postgres://${TPT_AUTH_BOOTSTRAP_USER:-admin}:${POSTGRES_PASSWORD:-postgres}@keystone:5432/tpt_soma
       - FLIGHT_LISTEN_ADDR=0.0.0.0:8815
+      - CAPABILITY_ROOT_KEY_PATH=/run/secrets/capability_root_key
     depends_on:
       keystone:
         condition: service_healthy
+    volumes:
+      - capability-secrets:/run/secrets
 
 volumes:
   tpt-data:

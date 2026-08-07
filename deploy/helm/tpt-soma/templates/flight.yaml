@@ -1,0 +1,59 @@
+{{- if .Values.flight.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tpt-soma.fullname" . }}-flight
+  labels:
+    {{- include "tpt-soma.labels" . | nindent 4 }}
+    app.kubernetes.io/component: flight
+spec:
+  replicas: {{ .Values.flight.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "tpt-soma.name" . }}
+      app.kubernetes.io/component: flight
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "tpt-soma.name" . }}
+        app.kubernetes.io/component: flight
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "tpt-soma.labels" . | nindent 8 }}
+    spec:
+      {{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.global.imagePullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: flight
+          image: "{{ .Values.flight.image.repository }}:{{ .Values.flight.image.tag }}"
+          command: ["tpt-soma-flight"]
+          ports:
+            - name: flight
+              containerPort: {{ .Values.flight.ports.flight }}
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              value: {{ .Values.flight.env.databaseUrl | quote }}
+            - name: FLIGHT_LISTEN_ADDR
+              value: 0.0.0.0:{{ .Values.flight.ports.flight }}
+            - name: CAPABILITY_ROOT_KEY_PATH
+              value: /run/secrets/capability_root_key
+          volumeMounts:
+            - name: capability-key
+              mountPath: /run/secrets
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: flight
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: capability-key
+          secret:
+            secretName: {{ include "tpt-soma.fullname" . }}-capability-secrets
+            optional: true
+{{- end }}

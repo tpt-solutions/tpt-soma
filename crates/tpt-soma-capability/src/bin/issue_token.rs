@@ -93,6 +93,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut registry = DataClassRegistry::default();
             registry.seed_phase0();
+            registry.seed_phase2();
+            registry.seed_phase3();
+            registry.seed_phase4();
 
             if registry.get(&resource_class).is_none() {
                 eprintln!(

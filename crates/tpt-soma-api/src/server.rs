@@ -272,9 +272,10 @@ async fn cohort_aggregate_count(
     let noisy_count =
         dp.cohort_aggregate_export(&payload.cohort_id, "api", count as usize, sensitivity)?;
 
+    // NOTE: only the noisy count leaves the process. The true count is never
+    // returned, otherwise differential privacy would be defeated.
     Ok(axum::Json(serde_json::json!({
         "cohort_id": payload.cohort_id,
-        "true_count": count,
         "noisy_count": noisy_count,
         "epsilon_spent": sensitivity,
     })))

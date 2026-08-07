@@ -5364,6 +5364,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "tpt-soma-pathos"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.19",
+ "tpt-soma-audit",
+ "tpt-soma-capability",
+ "tpt-soma-core",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "tpt-soma-simulacrum"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.19",
+ "tokio",
+ "tpt-soma-audit",
+ "tpt-soma-capability",
+ "tpt-soma-core",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "tracing"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"

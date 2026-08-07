@@ -11,6 +11,8 @@ members = [
     "crates/tpt-soma-api",
     "crates/tpt-soma-organon",
     "crates/tpt-soma-chronos",
+    "crates/tpt-soma-simulacrum",
+    "crates/tpt-soma-pathos",
 ]
 exclude = ["frontend"]
 

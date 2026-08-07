@@ -28,6 +28,35 @@ jobs:
       - name: Deny check
         run: cargo deny check
 
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+      - name: Coverage summary (workspace floor 65% line coverage)
+        run: |
+          cargo llvm-cov --workspace --exclude-explicitly-unused \
+            --ignore-filename-regex 'tests/|/tests/' \
+            --fail-under-lines 65 \
+            --summary-only
+      - name: Upload lcov report
+        run: |
+          cargo llvm-cov --workspace --exclude-explicitly-unused \
+            --ignore-filename-regex 'tests/|/tests/' \
+            --lcov --output-path lcov.info
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lcov
+          path: lcov.info
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
@@ -54,7 +83,29 @@ jobs:
         with:
           version: v3.16
       - run: helm lint deploy/helm/tpt-soma
-      - run: helm template tpt-soma deploy/helm/tpt-soma
+      - run: |
+          # render with a dummy capability key to exercise the secret + mounts
+          helm template tpt-soma deploy/helm/tpt-soma \
+            --set capability.rootKeyBase64=Y2ktZHVtbXkta2V5LWJhc2U2NC1kYXRh > /tmp/rendered.yaml
+      - name: Set up kind
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: tpt-soma
+      - name: Validate against kind cluster
+        run: |
+          kubectl version --client
+          # dry-run install validates the chart against a live Kubernetes API
+          # (templates, RBAC, secret/PVC resources) without pulling images.
+          helm install tpt-soma deploy/helm/tpt-soma \
+            --set keystone.auth.bootstrapPassword=ci-pass \
+            --set minio.rootPassword=ci-minio-pass \
+            --set api.env.databaseUrl=postgres://admin:ci-pass@keystone:5432/tpt_soma \
+            --set flight.env.databaseUrl=postgres://admin:ci-pass@keystone:5432/tpt_soma \
+            --set capability.rootKeyBase64=Y2ktZHVtbXkta2V5LWJhc2U2NC1kYXRh \
+            --dry-run=client \
+            --debug
+          # resources parse and validate against the live cluster API schema
+          kubectl apply --dry-run=server -f /tmp/rendered.yaml
 
   schemas:
     name: Schemas

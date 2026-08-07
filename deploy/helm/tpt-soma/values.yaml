@@ -35,6 +35,11 @@ minio:
     enabled: true
     size: 100Gi
 
+# Capability root signing key. In production supply the base64 of the 32 raw
+# key bytes (see values-secrets.yaml.example); do not commit a real key here.
+capability:
+  rootKeyBase64: ""
+
 api:
   enabled: true
   replicaCount: 1
@@ -46,7 +51,22 @@ api:
   env:
     databaseUrl: "postgres://admin:changeme@keystone:5432/tpt_soma"
     minioEndpoint: "minio:9000"
+    minioAccessKey: "minioadmin"
+    minioSecretKey: "minioadmin"
     minioBucket: "raw-omics"
+    dpEpsilon: "1.0"
+  resources: {}
+
+flight:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: tpt-soma-api
+    tag: latest
+  ports:
+    flight: 8815
+  env:
+    databaseUrl: "postgres://admin:changeme@keystone:5432/tpt_soma"
 
 frontend:
   enabled: true

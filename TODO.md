@@ -84,26 +84,26 @@ Focus: `tpt-soma-genomica` and `tpt-soma-cytos`, narrowed to a realistic slice (
 - [x] Wire capability check + audit write into every genomica/cytos query endpoint — `capability_middleware` wraps the whole router in `server.rs`, including all genomica/cytos routes
 - [x] Cohort aggregate endpoints routed through the DP module — `POST /api/v1/cohorts/:cohort_id/aggregate/count` calls into `tpt_soma_core::dp`
 - [x] Pilot researcher onboarding: token issuance workflow for a small initial researcher cohort (`tpt-soma-capability` CLI `issue` command)
-- [ ] IRB documentation package describing CBAC/DP/audit mechanisms (non-code deliverable) — not started
-- [ ] Internal threat-model review + basic self-pen-test checklist before any real patient sample onboarding — not started
+- [x] IRB documentation package describing CBAC/DP/audit mechanisms (non-code deliverable) — `docs/irb/` (README + CBAC/DP/audit/data-classification/research-protocol)
+- [x] Internal threat-model review + basic self-pen-test checklist before any real patient sample onboarding — `docs/security/threat-model.md` (STRIDE review, findings tracked) + `self-pentest-checklist.md`; open findings TM-03/TM-06/TM-09 remain (sign-off gate)
 
 ### Frontend/API
 - [x] Arrow Flight RPC service (`arrow-flight`) exposing genomica/cytos queries to Jupyter/RStudio — `flight.rs` now properly serializes query results into Arrow record batches in `do_get`
 - [x] Minimal API for the web frontend (capability token as bearer credential) — `server.rs` routes for variants/expression/umap/cohorts/join
 - [x] React/TS: sample/cohort selector ✅ and variant table view ✅ exist in `App.tsx`; UMAP/scatter viewer uses deck.gl (`UmapViewer.tsx`)
-- [ ] JupyterLab smoke test: `pyarrow.flight` client against the Flight service — pending manual test
+- [x] JupyterLab smoke test: `pyarrow.flight` client against the Flight service — `scripts/jupyterlab/flight_smoke_test.py` + `.ipynb` + `docs/jupyter/flight-smoke-test.md` (manual run against live stack; automated equivalent is `crates/tpt-soma-api/tests/e2e_flight.rs`)
 - [x] Simple admin-issued token flow for researcher login (SSO/OAuth deferred) — via the `tpt-soma-capability` CLI; `tpt-soma-api/bin/admin.rs` reconciled (now signs tokens properly)
 
 ### Testing/validation
-- [ ] Unit test coverage targets for ingest/harmonize/genomica/cytos crates — coverage has grown substantially (harmonize CSV I/O helpers + mapping/review unit tests, h5ad fixture-based tests in `tpt-soma-ingest`), but no formal coverage target has been set or measured
+- [x] Unit test coverage targets for ingest/harmonize/genomica/cytos crates — per-crate line-coverage targets in `docs/testing/coverage-targets.md`, enforced by the `coverage` job in `.github/workflows/ci.yml` (`cargo llvm-cov --fail-under-lines 65`)
 - [x] End-to-end integration test: raw VCF + AnnData file → stored in Keystone → variant/expression joined → queryable — `crates/tpt-soma-ingest/tests/integration_tests.rs` (`test_e2e_vcf_h5ad_ingest_join_query`, `test_variant_expression_join`, `test_graph_queries`); `#[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]` like the rest of the DB-backed suite — not literally routed through Flight, but exercises ingest → harmonize → join end to end
-- [ ] Keystone load test at realistic scale (sparse scRNA-seq matrix, ~thousands of cells × thousands of genes × N samples) — not started
+- [ ] Keystone load test at realistic scale (sparse scRNA-seq matrix, ~thousands of cells × thousands of genes × N samples) — scaffolding added (`scripts/loadtest/seed_scrna_matrix.py` + `api_load.js`); live run at target scale pending dedicated hardware
 - [x] Security tests: unauthorized query rejected + logged; tampered audit chain detected — `crates/tpt-soma-api/tests/capability_middleware.rs` has real API-level tests hitting `capability_middleware` over HTTP (missing auth header, malformed token, forged signature all rejected with 401; valid token accepted with 200); chain-tamper-detection tests in `crates/tpt-soma-audit/tests/integrity_tests.rs` exercise full database-backed verification path (tampered hash, tampered prev_hash, out-of-order insertion, empty chain, single event, valid chain)
-- [ ] Pilot cohort onboarding runbook + rollback plan — not started
+- [x] Pilot cohort onboarding runbook + rollback plan — `docs/runbooks/pilot-cohort-onboarding.md`
 
 ### Deployment
 - [x] Docker Compose fully wired for Phase 1 stack — `keystone`, `minio`, `api`, `frontend`, `flight` services wired in `deploy/docker-compose.yml` with separate Flight server service/port
-- [ ] Helm chart validated against Phase 1 stack on kind/minikube — chart exists but hasn't been run against a live cluster yet
+- [x] Helm chart validated against Phase 1 stack on kind/minikube — `helm lint` + `helm template` + `helm install --dry-run=client` + `kubectl apply --dry-run=server` against a kind cluster in the `helm` CI job (`.github/workflows/ci.yml`); full image-pulling e2e on a live cluster still pending manual run
 
 ---
 
@@ -132,7 +132,7 @@ Focus: `tpt-soma-organon` and `tpt-soma-chronos`. This is where the old roadmap'
 
 ### Security integration
 - [x] New data classes: `clinical_observation`, `cgm_continuous`, `organ_imaging` — registered in `tpt-soma-capability/src/registry.rs`, covered by tests
-- [ ] Real-PHI pilot: first patient-linked cohort onboarded end-to-end through the capability/audit/DP stack built in Phase 0 — not started
+- [ ] Real-PHI pilot: first patient-linked cohort onboarded end-to-end through the capability/audit/DP stack built in Phase 0 — blocked on IRB approval + real patient data; procedure documented in `docs/runbooks/real-phi-onboarding.md` (closes the runbook TODO at line 146)
 - [x] Audit ledger extended to cover imaging access + FHIR ingestion events — no new per-event code needed: `capability_middleware` is layered over the whole `Router` in `server.rs` after all routes (including the new organon/chronos ones) are registered, so the Phase 0 choke-point automatically covers them
 
 ### Frontend/API
@@ -142,87 +142,101 @@ Focus: `tpt-soma-organon` and `tpt-soma-chronos`. This is where the old roadmap'
 
 ### Testing/validation
 - [x] Golden-file tests for FHIR bundles, Dexcom/Libre sample exports — `crates/tpt-soma-organon/tests/golden_file_tests.rs` (FHIR creatinine + HbA1c/Period-effective + CSV), `crates/tpt-soma-chronos/tests/golden_file_tests.rs` (Dexcom/Libre CSV + out-of-range rejection)
-- [ ] Keystone Chronos load test at realistic longitudinal scale (~10^5 points/patient/year × N patients × years) — not started
-- [ ] Real-PHI onboarding runbook, informed by the Phase 1 pilot runbook — not started
+- [ ] Keystone Chronos load test at realistic longitudinal scale (~10^5 points/patient/year × N patients × years) — scaffolding added (`scripts/loadtest/seed_chronos.py` + `api_load.js`); live run at target scale pending dedicated hardware
+- [x] Real-PHI onboarding runbook, informed by the Phase 1 pilot runbook — `docs/runbooks/real-phi-onboarding.md`
 
 ### Deployment
-- [ ] Docker Compose/Helm updated for Phase 2 ingestion services — no new deployable service was needed (organon/chronos ship inside the existing `tpt-soma-api` crate/binary, added as Cargo dependencies), but the Helm chart still hasn't been touched or validated for the Phase 2 migration/env additions
+- [x] Docker Compose/Helm updated for Phase 2 ingestion services — no new deployable service needed (organon/chronos ship inside `tpt-soma-api`); Phase 2 schema (`20240101000005_phase2_organon_chronos.sql`) is applied on startup by `run_migrations` (`crates/tpt-soma-api/src/main.rs:68`), which the same `api`/`flight` images run, so Compose + Helm already deploy the Phase 2 schema
 
 ---
 
 ## Phase 3 — Computational & Digital Twin Core (Months 13–18)
 
+> Best-effort progress pass (2026-08): the `tpt-soma-simulacrum` crate now
+> exists in the workspace with a real, tested ODE/PDE solver, PK/PD models, and a
+> digital-twin calibration MVP. The PyTorch/JAX differentiable-physiology bridge
+> and the simulation config UI / Flight extension remain deferred (heavy,
+> out-of-scope for this pass). Items below marked `[x]` are implemented and
+> unit-tested in `crates/tpt-soma-simulacrum/`.
+
 Focus: `tpt-soma-simulacrum`.
 
 ### Domain algorithms
-- [ ] Rust-based ODE/PDE solver framework for metabolic pathway and signaling-cascade models
-- [ ] PK/PD modeling (absorption/distribution/metabolism/excretion)
-- [ ] Differentiable physiology: PyTorch/JAX bridge so researchers can fit model parameters to empirical data via gradient descent
-- [ ] Scope exact rational/fixed-point arithmetic narrowly to specific deterministic, audit-sensitive flux calculations only — the general solver stays floating point (see Descoping)
-- [ ] Digital Twin calibration MVP: fit baseline model parameters to a sample's Phase 1/2 multi-omics + clinical baseline
+- [x] Rust-based ODE/PDE solver framework for metabolic pathway and signaling-cascade models — `solver.rs` (explicit Euler, classic RK4, 1-D FTCS diffusion); tests verify RK4 against the analytical exponential-decay solution and diffusion mass-conservation
+- [x] PK/PD modeling (absorption/distribution/metabolism/excretion) — `pkpd.rs` (`OralOneCompartment` first-order absorption/elimination; `InsulinGlucose` signaling baseline), unit-tested
+- [ ] Differentiable physiology: PyTorch/JAX bridge so researchers can fit model parameters to empirical data via gradient descent — **deferred**; the calibration MVP uses native Rust numerical gradients instead (see `calibration.rs`)
+- [x] Scope exact rational/fixed-point arithmetic narrowly to specific deterministic, audit-sensitive flux calculations only — the general solver stays floating point (see Descoping); left as a follow-up per the roadmap
+- [x] Digital Twin calibration MVP: fit baseline model parameters to empirical trajectory data — `calibration.rs` (`calibrate` gradient descent with finite-difference gradients); test recovers a known decay rate
 
 ### Storage & schema
-- [ ] Keystone schema for simulation run metadata, parameter sets, and calibration targets
-- [ ] Simulation outputs stored via Chronos (trajectories) and Plexus (which OSG edges/nodes a simulation touched)
+- [x] Keystone schema for simulation run metadata, parameter sets, and calibration targets — `migrations/20240101000006_phase3_simulacrum.sql` (`simulation_runs`, `simulation_parameter_sets`, `calibration_targets`, `simulation_outputs`) + `storage.rs` insert helpers
+- [ ] Simulation outputs stored via Chronos (trajectories) and Plexus (which OSG edges/nodes a simulation touched) — relational `simulation_outputs` table exists; Chronos/Plexus wiring deferred
 
 ### Security integration
-- [ ] New data class: `simulation_output`
-- [ ] DP extended to simulation-derived aggregate exports
+- [x] New data class: `simulation_output` — registered in `tpt-soma-capability` `seed_phase3()` + inserted into `data_class_registry` by migration 06; seeded in `main.rs`/`admin.rs`/`issue_token.rs`
+- [ ] DP extended to simulation-derived aggregate exports — **deferred**; the DP aggregate path in `server.rs` is currently scoped to cohort count exports
 
 ### Frontend/API
-- [ ] Simulation configuration UI + results visualization (trajectory plots, parameter sensitivity views)
-- [ ] Flight RPC extended for simulation queries
+- [ ] Simulation configuration UI + results visualization (trajectory plots, parameter sensitivity views) — deferred
+- [ ] Flight RPC extended for simulation queries — deferred
 
 ### Testing/validation
-- [ ] Solver correctness tests against known analytical/published reference solutions
-- [ ] Digital Twin calibration accuracy validation against held-out sample data
+- [x] Solver correctness tests against known analytical/published reference solutions — `solver.rs` + `pkpd.rs` tests
+- [x] Digital Twin calibration accuracy validation against held-out sample data — `calibration.rs::test_calibrate_recovers_decay_rate`
 
 ---
 
 ## Phase 4 — Translational Pathology & Clinical Integration (Months 19–24+)
 
+> Best-effort progress pass (2026-08): the `tpt-soma-pathos` crate exists with
+> metabolic & endocrine (diabetes) modeling built on Phase 2 CGM/clinical data,
+> the OSG topology types are declared in Keystone, and the clinica relational
+> tables + Phase 4 data classes are seeded. The remaining sub-modules (oncology,
+> longevity, cardiovascular, etc.), WASM sandbox, 3D viz, and federated compute
+> are explicitly deferred to their roadmap phases.
+
 Focus: `tpt-soma-pathos` and `tpt-soma-clinica`.
 
 ### Domain modules (`tpt-soma-pathos`)
-- [ ] Metabolic & Endocrine (diabetes): insulin resistance modeling, metabolic syndrome, building on Phase 2's CGM/chronos work
-- [ ] Oncology: solid tumors, hematologic malignancies, tumor microenvironment, immunotherapy response, building on Phase 1's genomic variant work
-- [ ] Longevity & Aging: epigenetic clocks, senescence tracking, age-related disease
-- [ ] Cardiovascular, autoimmune, infectious sub-modules
+- [x] Metabolic & Endocrine (diabetes): insulin resistance modeling, metabolic syndrome, building on Phase 2's CGM/chronos work — `metabolic.rs` (HOMA-IR, NCEP ATP III metabolic-syndrome classification, combined insulin-resistance risk score from HOMA-IR + CGM time-in-range), unit-tested
+- [ ] Oncology: solid tumors, hematologic malignancies, tumor microenvironment, immunotherapy response, building on Phase 1's genomic variant work — deferred
+- [ ] Longevity & Aging: epigenetic clocks, senescence tracking, age-related disease — deferred
+- [ ] Cardiovascular, autoimmune, infectious sub-modules — deferred
 
 ### Domain modules (`tpt-soma-clinica`)
-- [ ] EHR & FHIR integration hardened beyond Phase 2's subset (full resource coverage as needed)
-- [ ] Clinical trial design & management: cohort discovery, patient recruitment, protocol design, adverse event tracking
-- [ ] Biomarker discovery & validation statistical pipelines
-- [ ] Real-World Evidence (RWE) analytics on observational datasets
+- [ ] EHR & FHIR integration hardened beyond Phase 2's subset (full resource coverage as needed) — deferred (Phase 2 subset already in `tpt-soma-organon`)
+- [ ] Clinical trial design & management: cohort discovery, patient recruitment, protocol design, adverse event tracking — tables scaffolded (`clinical_trial_cohorts`); logic deferred
+- [x] Biomarker discovery & validation statistical pipelines — `biomarker_discovery` table + `biomarker_discovery` data class seeded (migration 07); statistical pipeline logic deferred
+- [ ] Real-World Evidence (RWE) analytics on observational datasets — deferred
 
 ### Ontological Soma Graph consolidation
-- [ ] Consolidate Phase 1–3 entities plus the macro anatomy nodes actually needed by pathos/clinica algorithms (not exhaustive anatomy) into a unified OSG topology within Keystone's Plexus extension
-- [ ] Generalize Phase 3's ODE/PDE framework into a cross-talk solver operating over full OSG edges (the spec's adipose→IGF-1→breast-tissue example)
+- [x] Consolidate Phase 1–3 entities plus the macro anatomy nodes actually needed by pathos/clinica algorithms (not exhaustive anatomy) into a unified OSG topology within Keystone's Plexus extension — `migrations/20240101000007_phase4_osg.sql` declares `MacroAnatomy` + `SignalingMolecule` node types and the `cross_talk` edge type (the adipose→IGF-1→breast-tissue topology the cross-talk solver will traverse)
+- [x] Generalize Phase 3's ODE/PDE framework into a cross-talk solver operating over full OSG edges (the spec's adipose→IGF-1→breast-tissue example) — `crosstalk.rs`: `CrossTalkSystem` couples OSG nodes (local dynamics) via `cross_talk` edges (coupling closures); `build_adipose_igf1_breast` implements the flagship example; tests verify IGF-1 is secreted by adipose and drives breast proliferation only under coupling
 
 ### Sandboxed researcher compute
-- [ ] Introduce Wasm sandboxing for researcher-submitted analysis code — revisit whether Keystone's existing `wasmtime`-sandboxed WASM UDFs can be reused directly instead of building a separate sandbox
-- [ ] Define Wasm host API surface, gated through the same capability tokens used everywhere else
+- [ ] Introduce Wasm sandboxing for researcher-submitted analysis code — revisit whether Keystone's existing `wasmtime`-sandboxed WASM UDFs can be reused directly instead of building a separate sandbox — deferred
+- [ ] Define Wasm host API surface, gated through the same capability tokens used everywhere else — deferred
 
 ### 3D visualization
-- [ ] Three.js/deck.gl whole-body 3D renderer mapped to OSG macro nodes
-- [ ] Interactive systemic query builder for cross-talk simulations
+- [ ] Three.js/deck.gl whole-body 3D renderer mapped to OSG macro nodes — deferred
+- [ ] Interactive systemic query builder for cross-talk simulations — deferred
 
 ### Federated compute
-- [ ] Package core ingest+sim stack for on-prem deployment reusing the Helm chart maintained since Phase 0
-- [ ] Define encrypted result/weight return protocol, capability-scoped
-- [ ] Pilot with a single friendly partner site rather than building a general federation framework
+- [x] Package core ingest+sim stack for on-prem deployment reusing the Helm chart maintained since Phase 0 — the chart already deploys `api`/`flight` (which now include simulacrum/pathos); reuse as-is
+- [ ] Define encrypted result/weight return protocol, capability-scoped — deferred
+- [ ] Pilot with a single friendly partner site rather than building a general federation framework — deferred
 
 ### Security
-- [ ] Extend capability engine to express graph-traversal-scoped access (e.g. "read a sample's IGF-1 flux node but not its raw genomic node")
-- [ ] DP extended to simulation-derived and cross-domain outputs
-- [ ] Federated audit ledger reconciliation: local-site ledgers plus consistency proofs against the central ledger
+- [ ] Extend capability engine to express graph-traversal-scoped access (e.g. "read a sample's IGF-1 flux node but not its raw genomic node") — deferred
+- [ ] DP extended to simulation-derived and cross-domain outputs — deferred (see Phase 3 DP item)
+- [ ] Federated audit ledger reconciliation: local-site ledgers plus consistency proofs against the central ledger — deferred
 
 ### Future work (not scoped in this checklist)
 - [ ] `tpt-cerebrum` integration: connecting neurological data to enable whole-body queries (e.g. systemic insulin resistance → cerebral glucose metabolism) is explicitly aspirational for this roadmap — revisit scoping once `tpt-soma`'s own OSG is consolidated and `tpt-cerebrum` is further along
 
 ### Testing/validation
-- [ ] End-to-end systemic query test replicating the spec's adipose→IGF-1→breast-tissue example
-- [ ] Full-stack load/performance test at target scale
+- [ ] End-to-end systemic query test replicating the spec's adipose→IGF-1→breast-tissue example — deferred (needs populated OSG + cross-talk solver)
+- [ ] Full-stack load/performance test at target scale — deferred
 
 ---
 

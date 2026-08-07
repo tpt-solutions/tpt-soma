@@ -1,15 +1,18 @@
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
-use uuid::Uuid;
 use tpt_soma_audit::{AuditEvent, AuditLedger, integrity::verify_chain};
 use tpt_soma_core::test_helpers::test_pool;
+use uuid::Uuid;
 
 async fn setup_test_ledger() -> (PgPool, AuditLedger) {
-    let pool = test_pool().await.expect("Failed to connect to test database");
+    let pool = test_pool()
+        .await
+        .expect("Failed to connect to test database");
     let ledger = AuditLedger::new(pool.clone());
     (pool, ledger)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn make_test_event(
     id: Uuid,
     actor: &str,
@@ -55,11 +58,14 @@ fn make_test_event(
 
 #[tokio::test]
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
-async fn test_verify_chain_valid_database() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn test_verify_chain_valid_database() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+{
     let (pool, ledger) = setup_test_ledger().await;
 
     // Clean up any existing data
-    sqlx::query("DELETE FROM audit_ledger").execute(&pool).await?;
+    sqlx::query("DELETE FROM audit_ledger")
+        .execute(&pool)
+        .await?;
 
     let now = Utc::now();
     let id1 = Uuid::new_v4();
@@ -116,11 +122,14 @@ async fn test_verify_chain_valid_database() -> Result<(), Box<dyn std::error::Er
 
 #[tokio::test]
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
-async fn test_verify_chain_tampered_hash_database() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn test_verify_chain_tampered_hash_database()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (pool, ledger) = setup_test_ledger().await;
 
     // Clean up any existing data
-    sqlx::query("DELETE FROM audit_ledger").execute(&pool).await?;
+    sqlx::query("DELETE FROM audit_ledger")
+        .execute(&pool)
+        .await?;
 
     let now = Utc::now();
     let id1 = Uuid::new_v4();
@@ -169,11 +178,14 @@ async fn test_verify_chain_tampered_hash_database() -> Result<(), Box<dyn std::e
 
 #[tokio::test]
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
-async fn test_verify_chain_tampered_prev_hash_database() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn test_verify_chain_tampered_prev_hash_database()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (pool, ledger) = setup_test_ledger().await;
 
     // Clean up any existing data
-    sqlx::query("DELETE FROM audit_ledger").execute(&pool).await?;
+    sqlx::query("DELETE FROM audit_ledger")
+        .execute(&pool)
+        .await?;
 
     let now = Utc::now();
     let id1 = Uuid::new_v4();
@@ -222,11 +234,14 @@ async fn test_verify_chain_tampered_prev_hash_database() -> Result<(), Box<dyn s
 
 #[tokio::test]
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
-async fn test_verify_chain_single_event_database() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn test_verify_chain_single_event_database()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (pool, ledger) = setup_test_ledger().await;
 
     // Clean up any existing data
-    sqlx::query("DELETE FROM audit_ledger").execute(&pool).await?;
+    sqlx::query("DELETE FROM audit_ledger")
+        .execute(&pool)
+        .await?;
 
     let now = Utc::now();
     let id1 = Uuid::new_v4();
@@ -255,11 +270,14 @@ async fn test_verify_chain_single_event_database() -> Result<(), Box<dyn std::er
 
 #[tokio::test]
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
-async fn test_verify_chain_empty_database() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn test_verify_chain_empty_database() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+{
     let (pool, ledger) = setup_test_ledger().await;
 
     // Clean up any existing data
-    sqlx::query("DELETE FROM audit_ledger").execute(&pool).await?;
+    sqlx::query("DELETE FROM audit_ledger")
+        .execute(&pool)
+        .await?;
 
     let report = verify_chain(&ledger).await?;
     assert!(report.valid);
@@ -271,11 +289,14 @@ async fn test_verify_chain_empty_database() -> Result<(), Box<dyn std::error::Er
 
 #[tokio::test]
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
-async fn test_verify_chain_out_of_order_insertion() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn test_verify_chain_out_of_order_insertion()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (pool, ledger) = setup_test_ledger().await;
 
     // Clean up any existing data
-    sqlx::query("DELETE FROM audit_ledger").execute(&pool).await?;
+    sqlx::query("DELETE FROM audit_ledger")
+        .execute(&pool)
+        .await?;
 
     let now = Utc::now();
     let id1 = Uuid::new_v4();
@@ -332,11 +353,14 @@ async fn test_verify_chain_out_of_order_insertion() -> Result<(), Box<dyn std::e
 
 #[tokio::test]
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
-async fn test_audit_ledger_append_and_verify_integration() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn test_audit_ledger_append_and_verify_integration()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (pool, ledger) = setup_test_ledger().await;
 
     // Clean up any existing data
-    sqlx::query("DELETE FROM audit_ledger").execute(&pool).await?;
+    sqlx::query("DELETE FROM audit_ledger")
+        .execute(&pool)
+        .await?;
 
     let now = Utc::now();
     let id1 = Uuid::new_v4();
@@ -365,7 +389,7 @@ async fn test_audit_ledger_append_and_verify_integration() -> Result<(), Box<dyn
         timestamp: now,
         query_fingerprint: "query-2".to_string(),
         outcome: "success".to_string(),
-        prev_row_hash: None, // Will be set by append
+        prev_row_hash: None,     // Will be set by append
         row_hash: String::new(), // Will be computed by append
     };
 

@@ -156,6 +156,7 @@ mod tests {
     use chrono::{DateTime, Utc};
     use uuid::Uuid;
 
+    #[allow(clippy::too_many_arguments)]
     fn make_test_event(
         id: Uuid,
         actor: &str,

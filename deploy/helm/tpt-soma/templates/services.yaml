@@ -1,0 +1,111 @@
+{{- if .Values.keystone.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tpt-soma.fullname" . }}-keystone
+  labels:
+    {{- include "tpt-soma.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keystone
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "tpt-soma.name" . }}
+    app.kubernetes.io/component: keystone
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+    - name: http
+      port: 5435
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: 9187
+      targetPort: metrics
+      protocol: TCP
+{{- end }}
+{{- if .Values.minio.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tpt-soma.fullname" . }}-minio
+  labels:
+    {{- include "tpt-soma.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "tpt-soma.name" . }}
+    app.kubernetes.io/component: minio
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: api
+      port: 9000
+      targetPort: api
+      protocol: TCP
+    - name: console
+      port: 9001
+      targetPort: console
+      protocol: TCP
+{{- end }}
+{{- if .Values.api.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tpt-soma.fullname" . }}-api
+  labels:
+    {{- include "tpt-soma.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "tpt-soma.name" . }}
+    app.kubernetes.io/component: api
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+{{- end }}
+{{- if .Values.flight.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tpt-soma.fullname" . }}-flight
+  labels:
+    {{- include "tpt-soma.labels" . | nindent 4 }}
+    app.kubernetes.io/component: flight
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "tpt-soma.name" . }}
+    app.kubernetes.io/component: flight
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: flight
+      port: 8815
+      targetPort: flight
+      protocol: TCP
+{{- end }}
+{{- if .Values.frontend.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tpt-soma.fullname" . }}-frontend
+  labels:
+    {{- include "tpt-soma.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "tpt-soma.name" . }}
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+{{- end }}

@@ -62,6 +62,36 @@ mod tests {
     }
 
     #[test]
+    fn test_sign_honors_requested_expiry() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let backend = LocalSigningBackend::generate();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_secs();
+        let requested = now + 604_800; // 7 days
+
+        let token = CapabilityToken {
+            subject: "researcher".to_string(),
+            resource_class: "genomic_variant".to_string(),
+            cohort_scope: vec!["cohort-a".to_string()],
+            action: "read".to_string(),
+            expiry: requested,
+            nonce: [9u8; 32].to_vec(),
+            signature: Vec::new(),
+        };
+
+        let signed = CapabilityToken::sign(&backend, token);
+        assert_eq!(
+            signed.expiry, requested,
+            "sign must not override requested expiry"
+        );
+        assert!(!signed.is_expired());
+        assert!(signed.verify(&backend.verifying_key()));
+    }
+
+    #[test]
     fn test_attenuated_token_scope_exceeds_parent() {
         let backend = LocalSigningBackend::generate();
 

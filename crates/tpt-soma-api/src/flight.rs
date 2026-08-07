@@ -3,14 +3,18 @@ use arrow_flight::flight_service_server::FlightServiceServer;
 use arrow_ipc::writer::{DictionaryTracker, IpcDataGenerator, IpcWriteContext, IpcWriteOptions};
 use arrow_schema::{DataType, Field, Schema};
 use bytes::Bytes;
+use ed25519_dalek::VerifyingKey;
 use std::sync::Arc;
 use thiserror::Error;
 use tonic::transport::Server;
+use tpt_soma_capability::RevocationList;
 use tpt_soma_core::connection::PgPool;
 use tpt_soma_core::query::{
     get_cgm_readings_by_subject, get_clinical_observations_by_subject, get_expression_by_sample,
     get_umap_by_sample, get_variants_by_sample,
 };
+
+use crate::auth::{AuthError, authenticate_bearer};
 
 #[derive(Debug, Error)]
 pub enum FlightError {
@@ -23,6 +27,8 @@ pub enum FlightError {
 pub struct FlightServer {
     pub schema: Arc<Schema>,
     pub pool: PgPool,
+    pub verifying_key: VerifyingKey,
+    pub revocation_list: Arc<RevocationList>,
 }
 
 impl FlightServer {
@@ -30,7 +36,11 @@ impl FlightServer {
         self,
         addr: std::net::SocketAddr,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let svc = FlightServiceServer::new(TptSomaFlightService { pool: self.pool });
+        let svc = FlightServiceServer::new(TptSomaFlightService {
+            pool: self.pool,
+            verifying_key: self.verifying_key,
+            revocation_list: self.revocation_list,
+        });
 
         Server::builder().add_service(svc).serve(addr).await?;
 
@@ -40,6 +50,85 @@ impl FlightServer {
 
 struct TptSomaFlightService {
     pool: PgPool,
+    verifying_key: VerifyingKey,
+    revocation_list: Arc<RevocationList>,
+}
+
+/// Resource classes a given Flight data type may be read under (TM-02).
+fn flight_data_type_classes(data_type: &str) -> &'static [&'static str] {
+    match data_type {
+        "variants" => &["genomic_variant"],
+        "expression" | "umap" => &["transcriptomic_scrna"],
+        "clinical_observations" => &["clinical_observation"],
+        "cgm" => &["cgm_continuous"],
+        _ => &[],
+    }
+}
+
+fn auth_error_to_status(e: AuthError) -> tonic::Status {
+    let (code, msg) = match e {
+        AuthError::MissingAuthHeader => {
+            (tonic::Code::Unauthenticated, "missing authorization header")
+        }
+        AuthError::InvalidAuthHeader => {
+            (tonic::Code::Unauthenticated, "invalid authorization header")
+        }
+        AuthError::InvalidTokenFormat => (tonic::Code::Unauthenticated, "invalid token format"),
+        AuthError::InvalidSignature => (tonic::Code::Unauthenticated, "invalid token signature"),
+        AuthError::TokenExpired => (tonic::Code::Unauthenticated, "token expired"),
+        AuthError::TokenRevoked => (tonic::Code::Unauthenticated, "token revoked"),
+        AuthError::InsufficientScope => (tonic::Code::PermissionDenied, "insufficient scope"),
+    };
+    tonic::Status::new(code, msg)
+}
+
+/// Require a valid capability token on every Flight call and enforce the
+/// resource-class policy for the requested data type.
+async fn authorize_flight_call(
+    auth_header: Option<&str>,
+    verifying_key: &VerifyingKey,
+    revocation_list: &Arc<RevocationList>,
+    data_type: &str,
+) -> Result<(), tonic::Status> {
+    let token = authenticate_bearer(auth_header, verifying_key, revocation_list)
+        .await
+        .map_err(auth_error_to_status)?;
+
+    if token.action != "read" && token.action != "export" && token.action != "admin" {
+        return Err(tonic::Status::permission_denied(
+            "Flight only serves read access",
+        ));
+    }
+
+    let allowed = flight_data_type_classes(data_type);
+    if allowed.is_empty() || !allowed.contains(&token.resource_class.as_str()) {
+        return Err(tonic::Status::permission_denied(
+            "token not authorized for this data type",
+        ));
+    }
+
+    Ok(())
+}
+
+impl TptSomaFlightService {
+    async fn authorize<R>(
+        &self,
+        request: &tonic::Request<R>,
+        data_type: &str,
+    ) -> Result<(), tonic::Status> {
+        let auth_header = request
+            .metadata()
+            .get("authorization")
+            .and_then(|v| v.to_str().ok());
+
+        authorize_flight_call(
+            auth_header,
+            &self.verifying_key,
+            &self.revocation_list,
+            data_type,
+        )
+        .await
+    }
 }
 
 #[tonic::async_trait]
@@ -87,8 +176,7 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
         &self,
         request: tonic::Request<arrow_flight::FlightDescriptor>,
     ) -> Result<tonic::Response<arrow_flight::FlightInfo>, tonic::Status> {
-        let descriptor = request.into_inner();
-        let cmd = String::from_utf8_lossy(&descriptor.cmd).to_string();
+        let cmd = String::from_utf8_lossy(&request.get_ref().cmd).to_string();
 
         let parts: Vec<&str> = cmd.split(':').collect();
         if parts.len() != 2 {
@@ -96,6 +184,8 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
         }
 
         let (data_type, _sample_id) = (parts[0], parts[1]);
+
+        self.authorize(&request, data_type).await?;
 
         let schema = match data_type {
             "variants" => Arc::new(Schema::new(vec![
@@ -158,8 +248,7 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
         &self,
         request: tonic::Request<arrow_flight::Ticket>,
     ) -> Result<tonic::Response<Self::DoGetStream>, tonic::Status> {
-        let ticket = request.into_inner();
-        let cmd = String::from_utf8_lossy(&ticket.ticket).to_string();
+        let cmd = String::from_utf8_lossy(&request.get_ref().ticket).to_string();
         let parts: Vec<&str> = cmd.split(':').collect();
 
         if parts.len() != 2 {
@@ -168,6 +257,8 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
 
         let data_type = parts[0].to_string();
         let sample_id = parts[1].to_string();
+
+        self.authorize(&request, &data_type).await?;
 
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
@@ -666,6 +757,95 @@ mod tests {
             .unwrap();
         assert_eq!(variants.value(0), "1:100:A:T");
         assert_eq!(variants.value(1), "2:300:T:A");
+    }
+
+    #[tokio::test]
+    async fn test_flight_authorize_requires_token() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let verifying_key = key.verifying_key();
+        let revocation_list = Arc::new(RevocationList::new());
+
+        let result = authorize_flight_call(None, &verifying_key, &revocation_list, "variants")
+            .await
+            .unwrap_err();
+        assert_eq!(result.code(), tonic::Code::Unauthenticated);
+    }
+
+    #[tokio::test]
+    async fn test_flight_authorize_valid_token() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let verifying_key = key.verifying_key();
+        let revocation_list = Arc::new(RevocationList::new());
+
+        let token = crate::auth::test_helpers::signed_token(
+            &key,
+            "researcher-1",
+            "genomic_variant",
+            vec!["cohort-a".to_string()],
+            "read",
+            [1u8; 32],
+        );
+
+        authorize_flight_call(
+            Some(&format!("Bearer {}", token)),
+            &verifying_key,
+            &revocation_list,
+            "variants",
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_flight_authorize_wrong_data_class_rejected() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let verifying_key = key.verifying_key();
+        let revocation_list = Arc::new(RevocationList::new());
+
+        let token = crate::auth::test_helpers::signed_token(
+            &key,
+            "researcher-1",
+            "clinical_observation",
+            vec!["cohort-a".to_string()],
+            "read",
+            [1u8; 32],
+        );
+
+        let result = authorize_flight_call(
+            Some(&format!("Bearer {}", token)),
+            &verifying_key,
+            &revocation_list,
+            "variants",
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(result.code(), tonic::Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn test_flight_authorize_write_action_rejected() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let verifying_key = key.verifying_key();
+        let revocation_list = Arc::new(RevocationList::new());
+
+        let token = crate::auth::test_helpers::signed_token(
+            &key,
+            "researcher-1",
+            "genomic_variant",
+            vec!["cohort-a".to_string()],
+            "write",
+            [1u8; 32],
+        );
+
+        let result = authorize_flight_call(
+            Some(&format!("Bearer {}", token)),
+            &verifying_key,
+            &revocation_list,
+            "variants",
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(result.code(), tonic::Code::PermissionDenied);
     }
 
     #[tokio::test]

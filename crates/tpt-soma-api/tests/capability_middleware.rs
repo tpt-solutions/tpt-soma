@@ -1,7 +1,6 @@
 use axum::{Router, http::StatusCode, routing::get};
 use ed25519_dalek::SigningKey;
 use rand::RngCore;
-use reqwest;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tpt_soma_api::auth::{AuthState, capability_middleware};

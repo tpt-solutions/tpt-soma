@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod error;
 pub mod flight;
+pub mod secrets;
 pub mod server;
 
 pub use auth::{AuthState, capability_middleware};

@@ -16,11 +16,6 @@ pub struct CapabilityToken {
 
 impl CapabilityToken {
     pub fn sign<S: SigningBackend>(signing_backend: &S, mut token: Self) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time")
-            .as_secs();
-        token.expiry = now + 3600;
         let payload = Payload {
             subject: token.subject.clone(),
             resource_class: token.resource_class.clone(),

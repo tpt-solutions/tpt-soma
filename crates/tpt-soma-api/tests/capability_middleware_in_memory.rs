@@ -7,7 +7,10 @@ use ed25519_dalek::SigningKey;
 use rand::RngCore;
 use std::sync::Arc;
 use tpt_soma_api::auth::AuthError;
-use tpt_soma_capability::{CapabilityToken, RevocationList, signing::{LocalSigningBackend, SigningBackend}};
+use tpt_soma_capability::{
+    CapabilityToken, RevocationList,
+    signing::{LocalSigningBackend, SigningBackend},
+};
 
 fn make_test_token(signing_key: &SigningKey, expiry: u64) -> String {
     let backend = LocalSigningBackend::new(signing_key.clone());
@@ -125,13 +128,13 @@ async fn test_revocation_list() {
     let nonce = [42u8; 32];
 
     // Not revoked initially
-    assert!(!revocation_list.contains(&nonce.to_vec()).await);
+    assert!(!revocation_list.contains(nonce.as_ref()).await);
 
     // Revoke
     revocation_list.revoke(nonce.to_vec()).await;
 
     // Now revoked
-    assert!(revocation_list.contains(&nonce.to_vec()).await);
+    assert!(revocation_list.contains(nonce.as_ref()).await);
 }
 
 #[tokio::test]
@@ -194,8 +197,9 @@ async fn test_attenuated_token_cannot_exceed_parent_scope() {
 
     // Verify attenuation logic - attenuated token's cohort scope must be subset of parent
     let parent_cohorts: std::collections::HashSet<_> = parent_token.cohort_scope.iter().collect();
-    let attenuated_cohorts: std::collections::HashSet<_> = attenuated_token.cohort_scope.iter().collect();
-    
+    let attenuated_cohorts: std::collections::HashSet<_> =
+        attenuated_token.cohort_scope.iter().collect();
+
     assert!(!attenuated_cohorts.is_subset(&parent_cohorts));
 }
 
@@ -303,11 +307,11 @@ async fn test_compute_query_fingerprint() {
         .unwrap();
 
     let fingerprint = tpt_soma_api::auth::compute_query_fingerprint(&req);
-    
+
     // Should be a valid hex string
     assert!(!fingerprint.is_empty());
     assert!(fingerprint.chars().all(|c| c.is_ascii_hexdigit()));
-    
+
     // Same request should produce same fingerprint
     let req2 = Request::builder()
         .method("GET")
@@ -316,7 +320,7 @@ async fn test_compute_query_fingerprint() {
         .unwrap();
     let fingerprint2 = tpt_soma_api::auth::compute_query_fingerprint(&req2);
     assert_eq!(fingerprint, fingerprint2);
-    
+
     // Different request should produce different fingerprint
     let req3 = Request::builder()
         .method("POST")

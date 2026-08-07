@@ -93,6 +93,45 @@ impl DataClassRegistry {
             });
         }
     }
+
+    /// Phase 3 data class: simulation-derived outputs (digital-twin trajectories,
+    /// parameter sets, calibration results).
+    pub fn seed_phase3(&mut self) {
+        self.register(DataClass {
+            id: "simulation_output".to_string(),
+            description: "Digital-twin simulation outputs (trajectories, parameter sets)".to_string(),
+            sensitivity: Sensitivity::Confidential,
+        });
+    }
+
+    /// Phase 4 data classes: pathology findings, clinical-trial metadata, and
+    /// biomarker-discovery results.
+    pub fn seed_phase4(&mut self) {
+        let seeds = [
+            (
+                "pathos_finding",
+                "Computational pathology findings (e.g. insulin-resistance, tumor microenvironment)",
+                Sensitivity::Confidential,
+            ),
+            (
+                "clinical_trial",
+                "Clinical trial design, cohort discovery, and adverse-event metadata",
+                Sensitivity::Confidential,
+            ),
+            (
+                "biomarker_discovery",
+                "Biomarker discovery/validation statistical pipeline outputs",
+                Sensitivity::Confidential,
+            ),
+        ];
+        for (id, desc, sens) in seeds {
+            self.register(DataClass {
+                id: id.to_string(),
+                description: desc.to_string(),
+                sensitivity: sens,
+            });
+        }
+    }
 }
 
 #[cfg(test)]
@@ -106,5 +145,21 @@ mod tests {
         assert!(registry.get("clinical_observation").is_some());
         assert!(registry.get("cgm_continuous").is_some());
         assert!(registry.get("organ_imaging").is_some());
+    }
+
+    #[test]
+    fn test_seed_phase3_registers_simulation_output() {
+        let mut registry = DataClassRegistry::default();
+        registry.seed_phase3();
+        assert!(registry.get("simulation_output").is_some());
+    }
+
+    #[test]
+    fn test_seed_phase4_registers_pathos_clinica_classes() {
+        let mut registry = DataClassRegistry::default();
+        registry.seed_phase4();
+        assert!(registry.get("pathos_finding").is_some());
+        assert!(registry.get("clinical_trial").is_some());
+        assert!(registry.get("biomarker_discovery").is_some());
     }
 }
