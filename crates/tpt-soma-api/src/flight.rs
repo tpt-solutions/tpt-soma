@@ -113,9 +113,32 @@ async fn authorize_flight_call(
     Ok(())
 }
 
-/// Drains decoded batches into the device-state table. A bad batch rejects the
-/// whole put, and nothing from it is written. Returns the rows written.
-async fn ingest_batches<S>(pool: &PgPool, batches: &mut S) -> Result<u64, tonic::Status>
+/// Records a device-state write attempt. Used for refusals and failures, where
+/// the write did not happen. A failure here is logged, not returned.
+async fn record_best_effort(
+    ledger: &tpt_soma_audit::AuditLedger,
+    actor: &str,
+    outcome: &str,
+    rows: u64,
+) {
+    let event = crate::device_ingest::audit_event(actor, outcome, rows);
+    if let Err(e) = ledger.append(event).await {
+        tracing::error!(error = %e, outcome, "device_state audit write failed");
+    }
+}
+
+/// Drains decoded batches into the device-state table, one batch at a time.
+///
+/// Each valid batch is audited before it is written. If that audit record
+/// cannot be written, the batch is not written (fail closed). A bad batch
+/// stops the put. Batches before it are already committed, and each batch is
+/// its own transaction. Returns the rows written.
+async fn ingest_batches<S>(
+    pool: &PgPool,
+    ledger: &tpt_soma_audit::AuditLedger,
+    actor: &str,
+    batches: &mut S,
+) -> Result<u64, tonic::Status>
 where
     S: futures::Stream<Item = Result<arrow_array::RecordBatch, arrow_flight::error::FlightError>>
         + Unpin,
@@ -127,11 +150,25 @@ where
         .await
         .map_err(|e| tonic::Status::invalid_argument(e.to_string()))?
     {
-        let rows = crate::device_ingest::observations_from_batch(&batch)
-            .map_err(|e| tonic::Status::invalid_argument(e.to_string()))?;
-        total += crate::device_ingest::insert(pool, &rows)
+        let rows = match crate::device_ingest::observations_from_batch(&batch) {
+            Ok(rows) => rows,
+            Err(e) => {
+                record_best_effort(ledger, actor, "rejected", 0).await;
+                return Err(tonic::Status::invalid_argument(e.to_string()));
+            }
+        };
+        let count = rows.len() as u64;
+        ledger
+            .append(crate::device_ingest::audit_event(actor, "accepted", count))
             .await
-            .map_err(|e| tonic::Status::internal(e.to_string()))?;
+            .map_err(|e| tonic::Status::internal(format!("audit write failed: {e}")))?;
+        match crate::device_ingest::insert(pool, &rows).await {
+            Ok(n) => total += n,
+            Err(e) => {
+                record_best_effort(ledger, actor, "failed", count).await;
+                return Err(tonic::Status::internal(e.to_string()));
+            }
+        }
     }
     Ok(total)
 }
@@ -387,7 +424,12 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
         )
         .await
         .map_err(auth_error_to_status)?;
-        crate::device_ingest::check_scope(&token.action, &token.resource_class)?;
+        let ledger = tpt_soma_audit::AuditLedger::new(self.pool.clone());
+        if let Err(status) = crate::device_ingest::check_scope(&token.action, &token.resource_class)
+        {
+            record_best_effort(&ledger, &token.subject, "denied", 0).await;
+            return Err(status);
+        }
 
         let mut stream = request.into_inner();
         let first = stream
@@ -417,9 +459,10 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
             arrow_flight::decode::FlightRecordBatchStream::new_from_flight_data(messages);
 
         let pool = self.pool.clone();
+        let actor = token.subject.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(1);
         tokio::spawn(async move {
-            let outcome = ingest_batches(&pool, &mut batches).await;
+            let outcome = ingest_batches(&pool, &ledger, &actor, &mut batches).await;
             let msg = outcome.map(|rows| arrow_flight::PutResult {
                 app_metadata: bytes::Bytes::from(format!("{{\"rows\":{rows}}}")),
             });

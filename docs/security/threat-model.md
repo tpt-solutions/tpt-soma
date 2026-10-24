@@ -61,10 +61,16 @@ subject is refused. A bad batch is rejected whole, and nothing from it is
 written. Covered by unit tests for scope and batch validation. The database
 write is covered by an `#[ignore]`d test that needs `TEST_DATABASE_URL`.
 
-**Not yet covered:** writes and reads are not audit-logged in `flight.rs`, and
-`device_state` rows carry no cohort scope, so a token for any device can
-write any `tool_id`. Both need decisions before device data is used outside
-the test environment.
+**Audit:** every device-state write is recorded in the audit ledger, with
+outcome `accepted`, `rejected`, `denied` or `failed`. An accepted batch is
+recorded before its rows are written. If that record cannot be written, the
+batch is not written. Refusals and failures are recorded best-effort, and a
+write failure is logged.
+
+**Not yet covered:** reads of Flight data are still not audit-logged, and
+`device_state` rows carry no cohort scope, so a token for any device can write
+any `tool_id`. The cohort-scope question needs a decision before device data is
+used outside the test environment.
 
 ### TM-03 — Revocation list is in-memory only
 

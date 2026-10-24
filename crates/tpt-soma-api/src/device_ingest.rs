@@ -179,6 +179,24 @@ pub fn observations_from_batch(batch: &RecordBatch) -> Result<Vec<Observation>, 
     Ok(rows)
 }
 
+/// Audit record for a device-state write attempt. Device rows have no cohort,
+/// so `cohort_scope` is empty. `outcome` is one of `accepted`, `rejected`,
+/// `denied` or `failed`.
+pub fn audit_event(actor: &str, outcome: &str, rows: u64) -> tpt_soma_audit::AuditEvent {
+    tpt_soma_audit::AuditEvent {
+        id: uuid::Uuid::new_v4(),
+        actor: actor.to_string(),
+        resource_class: RESOURCE_CLASS.to_string(),
+        action: INGEST_ACTION.to_string(),
+        cohort_scope: Vec::new(),
+        timestamp: chrono::Utc::now(),
+        query_fingerprint: format!("device_state_ingest:rows={rows}"),
+        outcome: outcome.to_string(),
+        prev_row_hash: None,
+        row_hash: String::new(),
+    }
+}
+
 /// Writes observations in one transaction. Returns the number of rows written.
 pub async fn insert(pool: &PgPool, rows: &[Observation]) -> Result<u64, sqlx::Error> {
     let mut tx = pool.begin().await?;
@@ -236,6 +254,19 @@ mod tests {
         // A genomic token must not write device state.
         let status = check_scope("ingest", "genomic_variant").unwrap_err();
         assert_eq!(status.code(), tonic::Code::PermissionDenied);
+    }
+
+    // ---- audit record -----------------------------------------------------
+
+    #[test]
+    fn audit_event_names_the_device_class_and_has_no_cohort() {
+        let e = audit_event("alice", "accepted", 3);
+        assert_eq!(e.actor, "alice");
+        assert_eq!(e.resource_class, RESOURCE_CLASS);
+        assert_eq!(e.action, INGEST_ACTION);
+        assert!(e.cohort_scope.is_empty());
+        assert_eq!(e.outcome, "accepted");
+        assert_eq!(e.query_fingerprint, "device_state_ingest:rows=3");
     }
 
     // ---- batch validation -------------------------------------------------
