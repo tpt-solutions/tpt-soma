@@ -112,6 +112,7 @@ async fn test_token_verification_expired() {
         resource_class: token.resource_class.clone(),
         cohort_scope: token.cohort_scope.clone(),
         action: token.action.clone(),
+        graph_scope: token.graph_scope.clone(),
         expiry: token.expiry,
         nonce: token.nonce.clone(),
     };

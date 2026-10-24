@@ -53,6 +53,19 @@ queries. **Status:** **FIXED (2026-08)** — `flight.rs` now validates a
 resource class. The Flight binary reads `CAPABILITY_ROOT_KEY_PATH`. Covered by
 `e2e_flight.rs` (DB-backed) and in-process tests.
 
+**Write path added (2026-10).** `do_put` now accepts one subject, `device_state`,
+for tpt-hands device telemetry (`device_ingest.rs`, migration `000009`). It
+needs a token with action `ingest` (or `admin`) and resource class
+`device_state`. A `read` or `export` token is refused. Any other `do_put`
+subject is refused. A bad batch is rejected whole, and nothing from it is
+written. Covered by unit tests for scope and batch validation. The database
+write is covered by an `#[ignore]`d test that needs `TEST_DATABASE_URL`.
+
+**Not yet covered:** writes and reads are not audit-logged in `flight.rs`, and
+`device_state` rows carry no cohort scope, so a token for any device can
+write any `tool_id`. Both need decisions before device data is used outside
+the test environment.
+
 ### TM-03 — Revocation list is in-memory only
 
 `RevocationList` (`crates/tpt-soma-capability/src/revocation.rs`) is a

@@ -113,6 +113,29 @@ async fn authorize_flight_call(
     Ok(())
 }
 
+/// Drains decoded batches into the device-state table. A bad batch rejects the
+/// whole put, and nothing from it is written. Returns the rows written.
+async fn ingest_batches<S>(pool: &PgPool, batches: &mut S) -> Result<u64, tonic::Status>
+where
+    S: futures::Stream<Item = Result<arrow_array::RecordBatch, arrow_flight::error::FlightError>>
+        + Unpin,
+{
+    use futures::TryStreamExt;
+    let mut total = 0u64;
+    while let Some(batch) = batches
+        .try_next()
+        .await
+        .map_err(|e| tonic::Status::invalid_argument(e.to_string()))?
+    {
+        let rows = crate::device_ingest::observations_from_batch(&batch)
+            .map_err(|e| tonic::Status::invalid_argument(e.to_string()))?;
+        total += crate::device_ingest::insert(pool, &rows)
+            .await
+            .map_err(|e| tonic::Status::internal(e.to_string()))?;
+    }
+    Ok(total)
+}
+
 impl TptSomaFlightService {
     async fn authorize<R>(
         &self,
@@ -348,9 +371,64 @@ impl arrow_flight::flight_service_server::FlightService for TptSomaFlightService
 
     async fn do_put(
         &self,
-        _request: tonic::Request<tonic::Streaming<arrow_flight::FlightData>>,
+        request: tonic::Request<tonic::Streaming<arrow_flight::FlightData>>,
     ) -> Result<tonic::Response<Self::DoPutStream>, tonic::Status> {
-        Err(tonic::Status::unimplemented("do_put not implemented"))
+        // Writes are a separate policy from reads (TM-02). Only device-state
+        // ingest is accepted, and only with the `ingest` action.
+        let auth_header = request
+            .metadata()
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
+        let token = authenticate_bearer(
+            auth_header.as_deref(),
+            &self.verifying_key,
+            &self.revocation_list,
+        )
+        .await
+        .map_err(auth_error_to_status)?;
+        crate::device_ingest::check_scope(&token.action, &token.resource_class)?;
+
+        let mut stream = request.into_inner();
+        let first = stream
+            .message()
+            .await?
+            .ok_or_else(|| tonic::Status::invalid_argument("empty put stream"))?;
+        let descriptor = first
+            .flight_descriptor
+            .clone()
+            .ok_or_else(|| tonic::Status::invalid_argument("first message needs a descriptor"))?;
+        let subject = String::from_utf8_lossy(&descriptor.cmd).to_string();
+        if subject != crate::device_ingest::SUBJECT {
+            return Err(tonic::Status::invalid_argument(
+                "do_put only accepts the device_state subject",
+            ));
+        }
+
+        // Re-attach the first message, which carries the schema, then decode.
+        let rest = futures::StreamExt::map(stream, |s| {
+            s.map_err(|status| arrow_flight::error::FlightError::ExternalError(Box::new(status)))
+        });
+        let messages = futures::StreamExt::chain(
+            futures::stream::once(futures::future::ready(Ok(first))),
+            rest,
+        );
+        let mut batches =
+            arrow_flight::decode::FlightRecordBatchStream::new_from_flight_data(messages);
+
+        let pool = self.pool.clone();
+        let (tx, rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            let outcome = ingest_batches(&pool, &mut batches).await;
+            let msg = outcome.map(|rows| arrow_flight::PutResult {
+                app_metadata: bytes::Bytes::from(format!("{{\"rows\":{rows}}}")),
+            });
+            let _ = tx.send(msg).await;
+        });
+
+        Ok(tonic::Response::new(
+            tokio_stream::wrappers::ReceiverStream::new(rx),
+        ))
     }
 
     async fn do_action(

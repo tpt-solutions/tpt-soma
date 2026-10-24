@@ -5588,6 +5588,7 @@ dependencies = [
  "clap",
  "csv",
  "ed25519-dalek",
+ "futures",
  "hex",
  "md5",
  "prometheus",
