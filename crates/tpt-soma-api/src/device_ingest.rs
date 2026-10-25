@@ -10,8 +10,8 @@
 //! Rows describe devices, not people. `tool_id` names an end-effector. Nothing
 //! here takes a patient identifier.
 
-use arrow_array::{Array, Float64Array, Int32Array, Int64Array, RecordBatch, StringArray};
 use tpt_soma_core::connection::PgPool;
+use tpt_soma_flight::RecordBatch;
 
 /// Flight subject name for device-state writes. Used as the `do_put` descriptor.
 pub const SUBJECT: &str = "device_state";
@@ -76,24 +76,47 @@ pub fn check_scope(action: &str, resource_class: &str) -> Result<(), tonic::Stat
     Ok(())
 }
 
-fn column<'a, T: 'static>(
+fn column<'a>(
     batch: &'a RecordBatch,
     name: &'static str,
-) -> Result<&'a T, IngestError> {
-    let col = batch
+) -> Result<&'a tpt_soma_flight::Column, IngestError> {
+    batch
         .column_by_name(name)
-        .ok_or(IngestError::MissingColumn(name))?;
-    col.as_any()
-        .downcast_ref::<T>()
+        .ok_or(IngestError::MissingColumn(name))
+}
+
+fn utf8<'a>(
+    batch: &'a RecordBatch,
+    name: &'static str,
+) -> Result<&'a [Option<String>], IngestError> {
+    column(batch, name)?
+        .as_utf8()
         .ok_or(IngestError::WrongType(name))
 }
 
-fn check_null(arr: &dyn Array, row: usize, column: &'static str) -> Result<(), IngestError> {
-    if arr.is_null(row) {
-        Err(IngestError::Null { row, column })
-    } else {
-        Ok(())
-    }
+fn int32<'a>(batch: &'a RecordBatch, name: &'static str) -> Result<&'a [Option<i32>], IngestError> {
+    column(batch, name)?
+        .as_int32()
+        .ok_or(IngestError::WrongType(name))
+}
+
+fn int64<'a>(batch: &'a RecordBatch, name: &'static str) -> Result<&'a [Option<i64>], IngestError> {
+    column(batch, name)?
+        .as_int64()
+        .ok_or(IngestError::WrongType(name))
+}
+
+fn float64<'a>(
+    batch: &'a RecordBatch,
+    name: &'static str,
+) -> Result<&'a [Option<f64>], IngestError> {
+    column(batch, name)?
+        .as_float64()
+        .ok_or(IngestError::WrongType(name))
+}
+
+fn value<'a, T>(v: &'a Option<T>, row: usize, column: &'static str) -> Result<&'a T, IngestError> {
+    v.as_ref().ok_or(IngestError::Null { row, column })
 }
 
 fn finite(value: f64, row: usize, column: &'static str) -> Result<f64, IngestError> {
@@ -113,12 +136,11 @@ fn finite(value: f64, row: usize, column: &'static str) -> Result<f64, IngestErr
 ///
 /// ```
 /// use tpt_soma_api::device_ingest::{observations_from_batch, IngestError};
-/// use arrow_array::RecordBatch;
-/// use arrow_schema::{DataType, Field, Schema};
+/// use tpt_soma_flight::{Column, DataType, Field, RecordBatch, Schema};
 /// use std::sync::Arc;
 ///
 /// let schema = Arc::new(Schema::new(vec![Field::new("tool_id", DataType::Utf8, false)]));
-/// let batch = RecordBatch::new_empty(schema);
+/// let batch = RecordBatch::try_new(schema, vec![Column::utf8(Vec::<String>::new())]).unwrap();
 /// assert!(matches!(
 ///     observations_from_batch(&batch),
 ///     Err(IngestError::MissingColumn("timestamp_us"))
@@ -129,51 +151,48 @@ pub fn observations_from_batch(batch: &RecordBatch) -> Result<Vec<Observation>, 
         return Err(IngestError::TooManyRows(batch.num_rows()));
     }
 
-    let tool_id = column::<StringArray>(batch, "tool_id")?;
-    let timestamp = column::<Int64Array>(batch, "timestamp_us")?;
-    let integrity = column::<Float64Array>(batch, "structural_integrity")?;
-    let pathway_id = column::<Int32Array>(batch, "pathway_id")?;
-    let state = column::<StringArray>(batch, "pathway_state")?;
-    let healing = column::<Float64Array>(batch, "healing_progress")?;
-    let resistance = column::<Float64Array>(batch, "resistance_ohms")?;
-    let bandwidth = column::<Float64Array>(batch, "max_bandwidth_mbps")?;
+    let tool_id = utf8(batch, "tool_id")?;
+    let timestamp = int64(batch, "timestamp_us")?;
+    let integrity = float64(batch, "structural_integrity")?;
+    let pathway_id = int32(batch, "pathway_id")?;
+    let state = utf8(batch, "pathway_state")?;
+    let healing = float64(batch, "healing_progress")?;
+    let resistance = float64(batch, "resistance_ohms")?;
+    let bandwidth = float64(batch, "max_bandwidth_mbps")?;
 
     let mut rows = Vec::with_capacity(batch.num_rows());
     for row in 0..batch.num_rows() {
-        check_null(tool_id, row, "tool_id")?;
-        check_null(timestamp, row, "timestamp_us")?;
-        check_null(integrity, row, "structural_integrity")?;
-        check_null(pathway_id, row, "pathway_id")?;
-        check_null(state, row, "pathway_state")?;
-        check_null(healing, row, "healing_progress")?;
-        check_null(resistance, row, "resistance_ohms")?;
-        check_null(bandwidth, row, "max_bandwidth_mbps")?;
+        let id = value(&tool_id[row], row, "tool_id")?;
+        let ts = *value(&timestamp[row], row, "timestamp_us")?;
+        let integrity = *value(&integrity[row], row, "structural_integrity")?;
+        let pathway_id = *value(&pathway_id[row], row, "pathway_id")?;
+        let st = value(&state[row], row, "pathway_state")?;
+        let healing = *value(&healing[row], row, "healing_progress")?;
+        let resistance = *value(&resistance[row], row, "resistance_ohms")?;
+        let bandwidth = *value(&bandwidth[row], row, "max_bandwidth_mbps")?;
 
-        let id = tool_id.value(row);
         if id.is_empty() {
             return Err(IngestError::EmptyToolId { row });
         }
-        let ts = timestamp.value(row);
         if ts < 0 {
             return Err(IngestError::NegativeTimestamp { row });
         }
-        let st = state.value(row);
-        if !PATHWAY_STATES.contains(&st) {
+        if !PATHWAY_STATES.contains(&st.as_str()) {
             return Err(IngestError::BadPathwayState {
                 row,
-                value: st.to_string(),
+                value: st.clone(),
             });
         }
 
         rows.push(Observation {
-            tool_id: id.to_string(),
+            tool_id: id.clone(),
             timestamp_us: ts,
-            structural_integrity: finite(integrity.value(row), row, "structural_integrity")?,
-            pathway_id: pathway_id.value(row),
-            pathway_state: st.to_string(),
-            healing_progress: finite(healing.value(row), row, "healing_progress")?,
-            resistance_ohms: finite(resistance.value(row), row, "resistance_ohms")?,
-            max_bandwidth_mbps: finite(bandwidth.value(row), row, "max_bandwidth_mbps")?,
+            structural_integrity: finite(integrity, row, "structural_integrity")?,
+            pathway_id,
+            pathway_state: st.clone(),
+            healing_progress: finite(healing, row, "healing_progress")?,
+            resistance_ohms: finite(resistance, row, "resistance_ohms")?,
+            max_bandwidth_mbps: finite(bandwidth, row, "max_bandwidth_mbps")?,
         });
     }
     Ok(rows)
@@ -225,9 +244,8 @@ pub async fn insert(pool: &PgPool, rows: &[Observation]) -> Result<u64, sqlx::Er
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arrow_array::{ArrayRef, Float64Array, Int32Array, Int64Array, RecordBatch, StringArray};
-    use arrow_schema::{DataType, Field, Schema};
     use std::sync::Arc;
+    use tpt_soma_flight::{Column, DataType, Field, Schema};
 
     // ---- scope ------------------------------------------------------------
 
@@ -306,15 +324,15 @@ mod tests {
             Field::new("resistance_ohms", DataType::Float64, true),
             Field::new("max_bandwidth_mbps", DataType::Float64, true),
         ]));
-        let cols: Vec<ArrayRef> = vec![
-            Arc::new(StringArray::from(c.tool_id)),
-            Arc::new(Int64Array::from(c.timestamp)),
-            Arc::new(Float64Array::from(c.integrity)),
-            Arc::new(Int32Array::from(c.pathway_id)),
-            Arc::new(StringArray::from(c.state)),
-            Arc::new(Float64Array::from(c.healing)),
-            Arc::new(Float64Array::from(c.resistance)),
-            Arc::new(Float64Array::from(c.bandwidth)),
+        let cols = vec![
+            Column::utf8_opt(c.tool_id),
+            Column::Int64(c.timestamp),
+            Column::Float64(c.integrity),
+            Column::Int32(c.pathway_id),
+            Column::utf8_opt(c.state),
+            Column::Float64(c.healing),
+            Column::Float64(c.resistance),
+            Column::Float64(c.bandwidth),
         ];
         RecordBatch::try_new(schema, cols).unwrap()
     }
@@ -406,15 +424,15 @@ mod tests {
             Field::new("resistance_ohms", DataType::Float64, true),
             Field::new("max_bandwidth_mbps", DataType::Float64, true),
         ]));
-        let cols: Vec<ArrayRef> = vec![
-            Arc::new(StringArray::from(vec!["hand-0"])),
-            Arc::new(Int64Array::from(vec![1i64])),
-            Arc::new(Float64Array::from(vec![0.5])),
-            Arc::new(Int64Array::from(vec![0i64])),
-            Arc::new(StringArray::from(vec!["intact"])),
-            Arc::new(Float64Array::from(vec![0.0])),
-            Arc::new(Float64Array::from(vec![10.0])),
-            Arc::new(Float64Array::from(vec![100.0])),
+        let cols = vec![
+            Column::utf8(["hand-0"]),
+            Column::int64([1]),
+            Column::float64([0.5]),
+            Column::int64([0]),
+            Column::utf8(["intact"]),
+            Column::float64([0.0]),
+            Column::float64([10.0]),
+            Column::float64([100.0]),
         ];
         let batch = RecordBatch::try_new(schema, cols).unwrap();
         assert_eq!(
@@ -430,11 +448,7 @@ mod tests {
             DataType::Utf8,
             true,
         )]));
-        let batch = RecordBatch::try_new(
-            schema,
-            vec![Arc::new(StringArray::from(vec!["hand-0"])) as ArrayRef],
-        )
-        .unwrap();
+        let batch = RecordBatch::try_new(schema, vec![Column::utf8(["hand-0"])]).unwrap();
         assert_eq!(
             observations_from_batch(&batch),
             Err(IngestError::MissingColumn("timestamp_us"))

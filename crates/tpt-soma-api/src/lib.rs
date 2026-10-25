@@ -2,6 +2,7 @@ pub mod auth;
 pub mod device_ingest;
 pub mod error;
 pub mod flight;
+pub mod metrics;
 pub mod secrets;
 pub mod server;
 

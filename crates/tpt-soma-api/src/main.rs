@@ -1,5 +1,4 @@
 use clap::{Parser, ValueHint};
-use prometheus::{Encoder, TextEncoder};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tpt_soma_api::server::ApiServer;
@@ -60,10 +59,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .with(fmt_layer)
         .init();
 
-    // Initialize Prometheus metrics
-    let metrics_registry = prometheus::Registry::new();
-    let metrics_registry = Arc::new(metrics_registry);
-
     let pool = create_pool(&args.database_url).await?;
     run_migrations(&pool).await?;
 
@@ -93,28 +88,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Start metrics server in background
     let metrics_addr = args.metrics_addr.parse::<SocketAddr>()?;
-    let metrics_registry_clone = metrics_registry.clone();
     tokio::spawn(async move {
         let app = axum::Router::new().route(
             "/metrics",
-            axum::routing::get(move || {
-                let registry = metrics_registry_clone.clone();
-                async move {
-                    let encoder = TextEncoder::new();
-                    let metric_families = registry.gather();
-                    let mut buffer = Vec::new();
-                    if encoder.encode(&metric_families, &mut buffer).is_ok() {
-                        axum::http::Response::builder()
-                            .header("Content-Type", "text/plain; version=0.0.4")
-                            .body(axum::body::Body::from(buffer))
-                            .unwrap()
-                    } else {
-                        axum::http::Response::builder()
-                            .status(500)
-                            .body(axum::body::Body::from("failed to encode metrics"))
-                            .unwrap()
-                    }
-                }
+            axum::routing::get(|| async {
+                axum::http::Response::builder()
+                    .header("Content-Type", tpt_soma_api::metrics::CONTENT_TYPE)
+                    .body(axum::body::Body::from(tpt_soma_api::metrics::render()))
+                    .unwrap()
             }),
         );
 

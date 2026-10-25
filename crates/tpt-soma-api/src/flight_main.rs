@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let verifying_key = signing_key.verifying_key();
 
     let server = FlightServer {
-        schema: std::sync::Arc::new(arrow_schema::Schema::empty()),
+        schema: std::sync::Arc::new(tpt_soma_flight::Schema::empty()),
         pool,
         verifying_key,
         revocation_list: Arc::new(RevocationList::new()),

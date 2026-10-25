@@ -3,13 +3,13 @@
 // Requires a running PostgreSQL database at TEST_DATABASE_URL (see
 // tpt-soma-core::test_helpers::test_pool for the default).
 
-use arrow_flight::flight_service_client::FlightServiceClient;
-use arrow_flight::{FlightDescriptor, Ticket};
 use ed25519_dalek::SigningKey;
 use std::sync::Arc;
 use tpt_soma_api::flight::FlightServer;
 use tpt_soma_capability::{CapabilityToken, RevocationList, signing::LocalSigningBackend};
 use tpt_soma_core::test_helpers::test_pool;
+use tpt_soma_flight::pb::{FlightData, FlightDescriptor, Ticket};
+use tpt_soma_flight::service::FlightClient;
 
 fn signed_token(
     signing_key: &SigningKey,
@@ -32,14 +32,14 @@ fn signed_token(
     serde_json::to_string(&signed).unwrap()
 }
 
-async fn spawn_flight_server() -> (FlightServiceClient<tonic::transport::Channel>, String) {
+async fn spawn_flight_server() -> (FlightClient, String) {
     let pool = test_pool().await.unwrap();
     let signing_key = SigningKey::from_bytes(&[9u8; 32]);
     let verifying_key = signing_key.verifying_key();
     let revocation_list = Arc::new(RevocationList::new());
 
     let server = FlightServer {
-        schema: Arc::new(arrow_schema::Schema::empty()),
+        schema: Arc::new(tpt_soma_flight::Schema::empty()),
         pool,
         verifying_key,
         revocation_list: revocation_list.clone(),
@@ -60,7 +60,7 @@ async fn spawn_flight_server() -> (FlightServiceClient<tonic::transport::Channel
         .connect()
         .await
         .unwrap();
-    let client = FlightServiceClient::new(channel);
+    let client = FlightClient::new(channel);
     let token = signed_token(&signing_key, "researcher-1", "genomic_variant", "read");
     (client, token)
 }
@@ -70,7 +70,7 @@ async fn spawn_flight_server() -> (FlightServiceClient<tonic::transport::Channel
 async fn test_flight_do_get_rejects_unauthenticated() {
     let (mut client, _token) = spawn_flight_server().await;
 
-    let ticket = Ticket::new("variants:00000000-0000-0000-0000-000000000000".to_string());
+    let ticket = Ticket::new("variants:00000000-0000-0000-0000-000000000000");
     let result = client.do_get(ticket).await;
     assert!(result.is_err());
     let status = result.unwrap_err();
@@ -84,7 +84,7 @@ async fn test_flight_do_get_rejects_wrong_resource_class() {
     let signing_key = SigningKey::from_bytes(&[9u8; 32]);
     let clinical_token = signed_token(&signing_key, "researcher-1", "clinical_observation", "read");
 
-    let ticket = Ticket::new("variants:00000000-0000-0000-0000-000000000000".to_string());
+    let ticket = Ticket::new("variants:00000000-0000-0000-0000-000000000000");
     let mut req = tonic::Request::new(ticket);
     req.metadata_mut().insert(
         "authorization",
@@ -168,22 +168,18 @@ async fn test_flight_do_get_authorized_returns_batches() {
     );
 
     let mut stream = client.do_get(req).await.unwrap().into_inner();
-    let mut flights: Vec<arrow_flight::FlightData> = Vec::new();
+    let mut flights: Vec<FlightData> = Vec::new();
     while let Ok(Some(data)) = stream.message().await {
         flights.push(data);
     }
     assert!(flights.len() >= 2, "expected schema + batch messages");
 
-    let batches = arrow_flight::utils::flight_data_to_batches(&flights).unwrap();
+    let batches = tpt_soma_flight::data::flight_data_to_batches(&flights).unwrap();
     assert_eq!(batches.len(), 1);
     assert_eq!(batches[0].num_rows(), 1);
 
-    let rsid = batches[0]
-        .column(5)
-        .as_any()
-        .downcast_ref::<arrow_array::StringArray>()
-        .unwrap();
-    assert_eq!(rsid.value(0), "rs123");
+    let rsid = batches[0].column(5).as_utf8().unwrap();
+    assert_eq!(rsid[0].as_deref(), Some("rs123"));
 
     // Cleanup
     sqlx::query("DELETE FROM sample_variants WHERE sample_id = $1")

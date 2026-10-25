@@ -6,7 +6,6 @@ use axum::{
     routing::{get, post},
 };
 use ed25519_dalek::VerifyingKey;
-use prometheus::Encoder;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tpt_soma_audit::AuditLedger;
@@ -964,18 +963,8 @@ async fn cross_domain_aggregate_count(
 }
 
 async fn metrics_handler() -> impl IntoResponse {
-    let encoder = prometheus::TextEncoder::new();
-    let metric_families = prometheus::gather();
-    let mut buffer = Vec::new();
-    if encoder.encode(&metric_families, &mut buffer).is_ok() {
-        axum::http::Response::builder()
-            .header("Content-Type", "text/plain; version=0.0.4")
-            .body(axum::body::Body::from(buffer))
-            .unwrap()
-    } else {
-        axum::http::Response::builder()
-            .status(500)
-            .body(axum::body::Body::from("failed to encode metrics"))
-            .unwrap()
-    }
+    axum::http::Response::builder()
+        .header("Content-Type", crate::metrics::CONTENT_TYPE)
+        .body(axum::body::Body::from(crate::metrics::render()))
+        .unwrap()
 }
