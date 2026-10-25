@@ -22,6 +22,10 @@ use tpt_soma_chronos::{
     cgm as chronos_cgm, storage as chronos_storage, trajectory as chronos_trajectory,
     variability as chronos_variability,
 };
+use tpt_soma_clinica::{
+    ClinicaError, storage as clinica_storage,
+    trial::{AdverseEvent, Criterion, SubjectFeatures},
+};
 use tpt_soma_organon::{
     imaging as organon_imaging, ingestion as organon_ingestion, organ_system::OrganSystemGraph,
     storage as organon_storage,
@@ -151,6 +155,17 @@ impl ApiServer {
             .route("/api/v1/simulate", post(run_simulation))
             // Phase 4: systemic query over an OSG topology (computed, not persisted)
             .route("/api/v1/systemic/query", post(run_systemic_query))
+            // Phase 4: clinical trial protocols, screening and adverse events
+            .route("/api/v1/trials", post(create_trial))
+            .route("/api/v1/trials/:trial_id/screen", post(screen_trial))
+            .route(
+                "/api/v1/trials/:trial_id/adverse-events",
+                post(record_trial_adverse_events),
+            )
+            .route(
+                "/api/v1/trials/:trial_id/adverse-events/summary",
+                get(get_trial_ae_summary),
+            )
             .route("/api/v1/simulations/:run_id", get(get_simulation))
             .route(
                 "/api/v1/simulations/:run_id/aggregate/count",
@@ -769,6 +784,165 @@ async fn run_systemic_query(
         "peak_value": result.peak_value,
         "peak_time": result.peak_time,
         "samples": result.samples,
+    })))
+}
+
+// Phase 4: clinical trial handlers
+
+fn clinica_err(e: ClinicaError) -> ApiError {
+    match e {
+        ClinicaError::InvalidInput(m) => ApiError::BadRequest(m),
+        ClinicaError::Database(e) => ApiError::Database(e),
+        other => ApiError::Internal(other.to_string()),
+    }
+}
+
+fn parse_trial_id(raw: &str) -> Result<Uuid> {
+    Uuid::parse_str(raw).map_err(|e| ApiError::BadRequest(format!("invalid trial id: {e}")))
+}
+
+#[derive(serde::Deserialize)]
+struct CriterionDto {
+    /// `inclusion` or `exclusion`
+    kind: String,
+    key: String,
+    min: f64,
+    max: f64,
+}
+
+impl CriterionDto {
+    fn into_criterion(self) -> Result<Criterion> {
+        let Self {
+            kind,
+            key,
+            min,
+            max,
+        } = self;
+        match kind.as_str() {
+            "inclusion" => Ok(Criterion::Inclusion { key, min, max }),
+            "exclusion" => Ok(Criterion::Exclusion { key, min, max }),
+            other => Err(ApiError::BadRequest(format!(
+                "criterion kind must be inclusion or exclusion, got {other}"
+            ))),
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct CreateTrialRequest {
+    trial_name: String,
+    cohort_label: String,
+    criteria: Vec<CriterionDto>,
+}
+
+#[axum::debug_handler]
+async fn create_trial(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Json(payload): axum::extract::Json<CreateTrialRequest>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let criteria = payload
+        .criteria
+        .into_iter()
+        .map(CriterionDto::into_criterion)
+        .collect::<Result<Vec<_>>>()?;
+    let id = clinica_storage::save_trial_protocol(
+        &state.pool,
+        &payload.trial_name,
+        &payload.cohort_label,
+        &criteria,
+    )
+    .await
+    .map_err(clinica_err)?;
+    Ok(axum::Json(serde_json::json!({ "trial_id": id })))
+}
+
+#[derive(serde::Deserialize)]
+struct ScreenCandidateDto {
+    subject_id: String,
+    features: SubjectFeatures,
+}
+
+#[derive(serde::Deserialize)]
+struct ScreenTrialRequest {
+    candidates: Vec<ScreenCandidateDto>,
+    target: usize,
+}
+
+#[axum::debug_handler]
+async fn screen_trial(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Path(trial_id): axum::extract::Path<String>,
+    axum::extract::Json(payload): axum::extract::Json<ScreenTrialRequest>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let trial_id = parse_trial_id(&trial_id)?;
+    let candidates: Vec<(String, SubjectFeatures)> = payload
+        .candidates
+        .into_iter()
+        .map(|c| (c.subject_id, c.features))
+        .collect();
+    let screened = candidates.len();
+    let enrolled =
+        clinica_storage::screen_and_persist(&state.pool, trial_id, &candidates, payload.target)
+            .await
+            .map_err(clinica_err)?;
+    Ok(axum::Json(serde_json::json!({
+        "screened": screened,
+        "enrolled": enrolled,
+        "shortfall": payload.target.saturating_sub(enrolled),
+    })))
+}
+
+#[derive(serde::Deserialize)]
+struct AdverseEventDto {
+    subject_id: String,
+    term: String,
+    grade: u8,
+    serious: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct RecordAdverseEventsRequest {
+    events: Vec<AdverseEventDto>,
+}
+
+#[axum::debug_handler]
+async fn record_trial_adverse_events(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Path(trial_id): axum::extract::Path<String>,
+    axum::extract::Json(payload): axum::extract::Json<RecordAdverseEventsRequest>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let trial_id = parse_trial_id(&trial_id)?;
+    let events: Vec<AdverseEvent> = payload
+        .events
+        .into_iter()
+        .map(|e| AdverseEvent {
+            subject_id: e.subject_id,
+            term: e.term,
+            grade: e.grade,
+            serious: e.serious,
+        })
+        .collect();
+    let recorded = clinica_storage::record_adverse_events(&state.pool, trial_id, &events)
+        .await
+        .map_err(clinica_err)?;
+    Ok(axum::Json(serde_json::json!({ "recorded": recorded })))
+}
+
+#[axum::debug_handler]
+async fn get_trial_ae_summary(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Path(trial_id): axum::extract::Path<String>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let trial_id = parse_trial_id(&trial_id)?;
+    let s = clinica_storage::load_ae_summary(&state.pool, trial_id)
+        .await
+        .map_err(clinica_err)?;
+    Ok(axum::Json(serde_json::json!({
+        "total": s.total,
+        "by_grade": s.by_grade,
+        "grade_3_or_higher": s.grade_3_or_higher,
+        "serious": s.serious,
+        "subjects_with_ae": s.subjects_with_ae,
     })))
 }
 

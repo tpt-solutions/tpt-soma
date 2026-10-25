@@ -267,6 +267,26 @@ const POLICY: &[(&str, &str, &[&str], &str)] = &[
         &["simulation_output"],
         "read",
     ),
+    // Phase 4: clinical trial protocols, screening and adverse events
+    ("POST", "/api/v1/trials", &["clinical_trial"], "write"),
+    (
+        "POST",
+        "/api/v1/trials/*/screen",
+        &["clinical_trial"],
+        "write",
+    ),
+    (
+        "POST",
+        "/api/v1/trials/*/adverse-events",
+        &["clinical_trial"],
+        "write",
+    ),
+    (
+        "GET",
+        "/api/v1/trials/*/adverse-events/summary",
+        &["clinical_trial"],
+        "read",
+    ),
 ];
 
 fn path_matches(path: &str, pattern: &str) -> bool {
@@ -307,7 +327,10 @@ fn action_allows(token_action: &str, required: &str) -> bool {
 }
 
 fn extract_cohort_id(path: &str) -> Option<String> {
-    let rest = path.strip_prefix("/api/v1/cohorts/")?;
+    // Trial ids are cohort scopes too: a token scoped to one trial cannot reach another.
+    let rest = path
+        .strip_prefix("/api/v1/cohorts/")
+        .or_else(|| path.strip_prefix("/api/v1/trials/"))?;
     let id = rest.split('/').next().unwrap_or("");
     if id.is_empty() {
         None
@@ -335,6 +358,11 @@ pub fn enforce_route_policy(
     }
 
     if !action_allows(&token.action, required.action) {
+        return Err(AuthError::InsufficientScope);
+    }
+
+    // Creating a trial mints a new cohort id, so only an unscoped (`*`) token may do it.
+    if path == "/api/v1/trials" && !token.cohort_scope.iter().any(|c| c == "*") {
         return Err(AuthError::InsufficientScope);
     }
 
@@ -577,6 +605,47 @@ mod tests {
         // An export token outranks read, so it is accepted too.
         let export = token("simulation_output", "cohort-a", "export");
         enforce_route_policy(&export, "POST", "/api/v1/systemic/query").unwrap();
+    }
+
+    #[test]
+    fn test_route_policy_trials_class_action_and_scope() {
+        let wrong = token("genomic_variant", "trial-1", "write");
+        assert!(matches!(
+            enforce_route_policy(&wrong, "POST", "/api/v1/trials/trial-1/screen").unwrap_err(),
+            AuthError::InsufficientScope
+        ));
+
+        let read = token("clinical_trial", "trial-1", "read");
+        enforce_route_policy(
+            &read,
+            "GET",
+            "/api/v1/trials/trial-1/adverse-events/summary",
+        )
+        .unwrap();
+        assert!(matches!(
+            enforce_route_policy(&read, "POST", "/api/v1/trials/trial-1/adverse-events")
+                .unwrap_err(),
+            AuthError::InsufficientScope
+        ));
+
+        // Scoped to trial-1 only: trial-2 is out of scope.
+        let write = token("clinical_trial", "trial-1", "write");
+        enforce_route_policy(&write, "POST", "/api/v1/trials/trial-1/screen").unwrap();
+        assert!(matches!(
+            enforce_route_policy(&write, "POST", "/api/v1/trials/trial-2/screen").unwrap_err(),
+            AuthError::InsufficientScope
+        ));
+    }
+
+    #[test]
+    fn test_route_policy_trial_creation_requires_wildcard_scope() {
+        let scoped = token("clinical_trial", "trial-1", "write");
+        assert!(matches!(
+            enforce_route_policy(&scoped, "POST", "/api/v1/trials").unwrap_err(),
+            AuthError::InsufficientScope
+        ));
+        let wildcard = token("clinical_trial", "*", "write");
+        enforce_route_policy(&wildcard, "POST", "/api/v1/trials").unwrap();
     }
 
     #[test]
