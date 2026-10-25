@@ -11,5 +11,6 @@ pub mod cohort;
 pub mod error;
 pub mod stats;
 pub mod storage;
+pub mod trial;
 
 pub use error::{ClinicaError, Result};
