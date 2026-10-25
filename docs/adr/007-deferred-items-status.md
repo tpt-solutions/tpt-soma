@@ -76,13 +76,27 @@
     exclusion criteria over subject features, screening in order to a target
     enrollment, with shortfall reporting.
   - Pure logic, no database access.
-- **Still deferred:** protocol design, persistence of trial results onto
-  `clinical_trial_cohorts`, and EHR/FHIR resource coverage beyond the Phase 2
+- **Persistence (2026-10-26):** migration 10 adds `trial_enrollments` and
+  `trial_adverse_events`. `storage::save_trial_protocol` stores criteria on
+  `clinical_trial_cohorts`; `screen_and_persist` records enrolled and
+  screen-failed decisions in one transaction; `record_adverse_events` validates
+  grades before writing; `load_ae_summary` reads them back. The DB-backed test
+  is `#[ignore]`d (needs `TEST_DATABASE_URL`); JSON round-trip tests run by default.
+- **API (2026-10-26):** `POST /api/v1/trials`, `POST /api/v1/trials/:id/screen`,
+  `POST /api/v1/trials/:id/adverse-events`, and
+  `GET /api/v1/trials/:id/adverse-events/summary`, each with an explicit `POLICY`
+  entry (`clinical_trial` class; write for mutations, read for the summary).
+  `extract_cohort_id` now treats `/api/v1/trials/:id` as a cohort scope, so a
+  token scoped to one trial cannot reach another, and creating a trial requires
+  a `*`-scoped token. Policy tests pass; the handlers themselves have no
+  DB-backed test.
+- **Still deferred:** a
+  richer protocol model (arms, visits), and EHR/FHIR resource coverage beyond the Phase 2
   subset. The FHIR scope has no written requirement yet, so it is not
   hardened speculatively.
-- **Plan:** persist screening and AE outputs through the existing
-  `cohort_membership` and `clinical_trial_cohorts` tables, behind the Phase 0
-  capability and audit choke-points.
+- **Plan:** expose the storage functions through `tpt-soma-api` routes with an
+  explicit `clinical_trial` policy entry, so the Phase 0 capability and audit
+  choke-points cover them.
 
 ### 2.5 Wasm sandbox execution backend (Phase 4, ~217–218)
 - **Status:** **implemented.** `tpt-soma-sandbox` now provides a real WASM
@@ -158,6 +172,15 @@
   and `tpt-soma-api` tests pass (the API run has 37 unit tests plus 16 in-memory
   middleware tests; DB-backed tests are ignored), and clippy with `-D warnings`
   is clean for these four crates.
+
+### 2.11 Audit-chain alerting (2026-10-26)
+- `verify_chain` no longer prints; `ChainReport.failure` carries the first bad
+  event's id, position and kind. `alert::check_and_alert` passes failures to
+  `AlertSink`s (`TracingAlertSink` in the library; the CLI sink also runs an
+  operator-supplied program, executed directly with no shell, with
+  `AUDIT_ALERT_*` environment variables).
+- Not built: a webhook or pager sink, and a scheduled runner outside
+  `audit-cli watch`. The DB-backed tamper tests remain `#[ignore]`d.
 
 ## 3. Consequences
 - The roadmap's security/compliance requirements are never dropped by

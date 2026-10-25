@@ -40,7 +40,7 @@ Tracking checklist for the full 4-phase roadmap defined in `spec.txt` (v2.0.0). 
 - [x] `tpt-soma-audit` crate: append-only Keystone table with hash-chaining (`row_hash = H(prev_row_hash || event_payload)`) in `ledger.rs`
 - [x] Audit event schema: actor, resource/data-class, action, cohort/sample scope, timestamp, query fingerprint, outcome — no raw PHI values in the ledger
 - [x] Single choke-point write path: audit logging happens inside `capability_middleware` in `tpt-soma-api`, not scattered per-endpoint
-- [x] Chain-integrity verification job (`integrity.rs::verify_chain`, exposed via `audit-cli verify-chain`) — mismatch handling is currently just a printed diagnostic, no alerting integration
+- [x] Chain-integrity verification job (`integrity.rs::verify_chain`, exposed via `audit-cli verify-chain`) — a mismatch now yields a `ChainFailure` (event id, position, hash-mismatch vs chain-break) and `tpt_soma_audit::check_and_alert` notifies `AlertSink`s; `audit-cli verify-chain --alert-command` / `audit-cli watch` run an operator program on failure; no built-in webhook/pager sink
 - [x] Compliance report generator (`audit-cli cohort-access --cohort … --from … --to …`)
 
 ### Differential privacy foundation
@@ -207,7 +207,7 @@ Focus: `tpt-soma-pathos` and `tpt-soma-clinica`.
 
 ### Domain modules (`tpt-soma-clinica`)
    - [ ] EHR & FHIR integration hardened beyond Phase 2's subset (full resource coverage as needed) — deferred (Phase 2 subset already in `tpt-soma-organon`; `docs/adr/007-deferred-items-status.md` §2.4)
-   - [ ] Clinical trial design & management: cohort discovery, patient recruitment, protocol design, adverse event tracking — tables scaffolded (`clinical_trial_cohorts`); AE grade/seriousness summaries (`trial::summarize_adverse_events`) and eligibility criteria with screen-and-recruit (`trial::screen_and_recruit`) implemented as pure logic. Protocol design and persistence onto `clinical_trial_cohorts` still open (`docs/adr/007-deferred-items-status.md` §2.4)
+   - [ ] Clinical trial design & management: cohort discovery, patient recruitment, protocol design, adverse event tracking — AE summaries, eligibility screening, and persistence done (`storage::save_trial_protocol`, `screen_and_persist`, `record_adverse_events`, `load_ae_summary`; migration 10 adds `trial_enrollments` / `trial_adverse_events`; DB test is `#[ignore]`d). exposed at `POST /api/v1/trials`, `/trials/:id/screen`, `/trials/:id/adverse-events`, `GET /trials/:id/adverse-events/summary` behind the capability/audit choke-point (`clinical_trial` class, per-trial cohort scope; creating a trial needs a `*`-scoped token); handlers have no DB-backed test yet; a richer protocol design model (visits, arms) still open (`docs/adr/007-deferred-items-status.md` §2.4)
 - [x] Biomarker discovery & validation statistical pipelines — `biomarker_discovery` table + `biomarker_discovery` data class seeded (migration 07); statistical pipeline logic deferred
 - [ ] Real-World Evidence (RWE) analytics on observational datasets — deferred
 
