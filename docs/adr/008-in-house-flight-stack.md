@@ -27,3 +27,4 @@ Supported types: Utf8, Int32, Int64, Float64, Boolean, nullable. No dictionaries
 
 - We own the wire-format code and must keep it compatible with Arrow clients as they evolve. Adding a type means touching `columnar.rs`, `ipc.rs` and the interop script.
 - `GetFlightInfo` now echoes the request descriptor; Arrow C++ (pyarrow) rejects a `FlightInfo` without one.
+- `tonic` is behind the `service` feature, which is on by default. Build with `--no-default-features` to use only the columnar, IPC and protobuf parts. That build has no tonic and no `sync_wrapper`. Other tpt repos can use it without a gRPC stack.

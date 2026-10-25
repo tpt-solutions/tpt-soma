@@ -11,10 +11,20 @@ description = "In-house columnar batches, Arrow-compatible IPC, and Flight gRPC 
 keywords = ['flight', 'grpc', 'columnar', 'ipc']
 categories = ['encoding', 'network-programming']
 
+[features]
+# The gRPC server and client need tonic. Turn `service` off to use only the
+# columnar, IPC and protobuf parts, which have no tonic dependency.
+default = ["service"]
+service = ["dep:tonic"]
+
 [dependencies]
-tonic = { workspace = true }
+tonic = { workspace = true, optional = true }
 bytes = { workspace = true }
 thiserror = { workspace = true }
+
+[[example]]
+name = "interop_server"
+required-features = ["service"]
 
 [dev-dependencies]
 tokio = { workspace = true }

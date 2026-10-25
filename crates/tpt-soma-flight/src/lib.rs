@@ -10,7 +10,8 @@
 //! - [`columnar`]: schemas and record batches for five value types.
 //! - [`ipc`]: Arrow IPC messages (metadata V5), read and write.
 //! - [`pb`]: protobuf encoding of the Flight messages.
-//! - [`service`]: the Flight gRPC server and a small client, on `tonic`.
+//! - [`service`]: the Flight gRPC server and a small client, on `tonic`
+//!   (feature `service`, on by default).
 
 pub mod columnar;
 pub mod data;
@@ -18,6 +19,7 @@ pub mod error;
 pub(crate) mod fb;
 pub mod ipc;
 pub mod pb;
+#[cfg(feature = "service")]
 pub mod service;
 
 pub use columnar::{Column, DataType, Field, RecordBatch, Schema};
