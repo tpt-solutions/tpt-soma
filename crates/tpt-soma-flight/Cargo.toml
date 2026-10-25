@@ -1,0 +1,22 @@
+[package]
+name = "tpt-soma-flight"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.0"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "In-house columnar batches, Arrow-compatible IPC, and Flight gRPC (no Apache-2.0-only dependencies)."
+keywords = ['flight', 'grpc', 'columnar', 'ipc']
+categories = ['encoding', 'network-programming']
+
+[dependencies]
+tonic = { workspace = true }
+bytes = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tokio-stream = "0.1"
+futures = { workspace = true }
