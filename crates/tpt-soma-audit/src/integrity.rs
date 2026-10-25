@@ -7,7 +7,7 @@ pub async fn verify_chain(ledger: &AuditLedger) -> Result<ChainReport, Integrity
     // Get all events in order
     let rows = sqlx::query_as::<_, AuditEvent>(
         r#"
-        SELECT id, actor, resource_class, action, cohort_scope, timestamp, 
+        SELECT id, actor, resource_class, action, cohort_scope, timestamp,
                query_fingerprint, outcome, prev_row_hash, row_hash
         FROM audit_ledger
         ORDER BY timestamp ASC
@@ -16,76 +16,16 @@ pub async fn verify_chain(ledger: &AuditLedger) -> Result<ChainReport, Integrity
     .fetch_all(pool)
     .await?;
 
-    if rows.is_empty() {
-        return Ok(ChainReport {
-            tail_hash: None,
-            valid: true,
-            events_checked: 0,
-        });
-    }
-
-    let mut prev_hash: Option<String> = None;
-    let mut valid = true;
-
-    for (i, event) in rows.iter().enumerate() {
-        // Recompute the expected hash
-        let mut hasher = Sha256::new();
-        if let Some(prev) = &prev_hash {
-            hasher.update(prev.as_bytes());
-        }
-        let payload = serde_json::json!({
-            "id": event.id,
-            "actor": event.actor,
-            "resource_class": event.resource_class,
-            "action": event.action,
-            "cohort_scope": event.cohort_scope,
-            "timestamp": event.timestamp,
-            "query_fingerprint": event.query_fingerprint,
-            "outcome": event.outcome,
-        });
-        hasher.update(serde_json::to_vec(&payload).unwrap());
-        let expected_hash = format!("{:x}", hasher.finalize());
-
-        // Check if the stored hash matches
-        if event.row_hash != expected_hash {
-            eprintln!("Hash mismatch at event {} (id: {})", i, event.id);
-            eprintln!("  Expected: {}", expected_hash);
-            eprintln!("  Got:      {}", event.row_hash);
-            valid = false;
-            break;
-        }
-
-        // Check if prev_row_hash matches previous event's row_hash
-        if event.prev_row_hash != prev_hash {
-            eprintln!("Chain break at event {} (id: {})", i, event.id);
-            eprintln!("  Expected prev: {:?}", prev_hash);
-            eprintln!("  Got prev:      {:?}", event.prev_row_hash);
-            valid = false;
-            break;
-        }
-
-        prev_hash = Some(event.row_hash.clone());
-    }
-
-    Ok(ChainReport {
-        tail_hash: prev_hash,
-        valid,
-        events_checked: rows.len(),
-    })
+    Ok(verify_chain_in_memory(&rows))
 }
 
-/// Verify a chain of audit events in-memory (for testing without database)
+/// Verify a chain of audit events in-memory (for testing without database).
+///
+/// Stops at the first bad event and records where it was found in
+/// [`ChainReport::failure`]. Nothing is printed; callers decide how to report.
 pub fn verify_chain_in_memory(events: &[AuditEvent]) -> ChainReport {
-    if events.is_empty() {
-        return ChainReport {
-            tail_hash: None,
-            valid: true,
-            events_checked: 0,
-        };
-    }
-
     let mut prev_hash: Option<String> = None;
-    let mut valid = true;
+    let mut failure = None;
 
     for (i, event) in events.iter().enumerate() {
         // Recompute the expected hash
@@ -106,21 +46,21 @@ pub fn verify_chain_in_memory(events: &[AuditEvent]) -> ChainReport {
         hasher.update(serde_json::to_vec(&payload).unwrap());
         let expected_hash = format!("{:x}", hasher.finalize());
 
-        // Check if the stored hash matches
-        if event.row_hash != expected_hash {
-            eprintln!("Hash mismatch at event {} (id: {})", i, event.id);
-            eprintln!("  Expected: {}", expected_hash);
-            eprintln!("  Got:      {}", event.row_hash);
-            valid = false;
-            break;
-        }
-
-        // Check if prev_row_hash matches previous event's row_hash
-        if event.prev_row_hash != prev_hash {
-            eprintln!("Chain break at event {} (id: {})", i, event.id);
-            eprintln!("  Expected prev: {:?}", prev_hash);
-            eprintln!("  Got prev:      {:?}", event.prev_row_hash);
-            valid = false;
+        let kind = if event.row_hash != expected_hash {
+            Some(ChainFailureKind::HashMismatch)
+        } else if event.prev_row_hash != prev_hash {
+            Some(ChainFailureKind::ChainBreak)
+        } else {
+            None
+        };
+        if let Some(kind) = kind {
+            failure = Some(ChainFailure {
+                index: i,
+                event_id: event.id,
+                kind,
+                expected_hash,
+                actual_hash: event.row_hash.clone(),
+            });
             break;
         }
 
@@ -129,8 +69,9 @@ pub fn verify_chain_in_memory(events: &[AuditEvent]) -> ChainReport {
 
     ChainReport {
         tail_hash: prev_hash,
-        valid,
+        valid: failure.is_none(),
         events_checked: events.len(),
+        failure,
     }
 }
 
@@ -138,6 +79,29 @@ pub struct ChainReport {
     pub tail_hash: Option<String>,
     pub valid: bool,
     pub events_checked: usize,
+    /// Set when `valid` is false: the first event that failed verification.
+    pub failure: Option<ChainFailure>,
+}
+
+/// Where and how the chain first failed verification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChainFailure {
+    /// Position of the bad event in timestamp order.
+    pub index: usize,
+    pub event_id: uuid::Uuid,
+    pub kind: ChainFailureKind,
+    /// Hash recomputed from the chain so far and the event payload.
+    pub expected_hash: String,
+    /// Hash stored on the event.
+    pub actual_hash: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChainFailureKind {
+    /// The stored `row_hash` does not match the recomputed hash (payload edited).
+    HashMismatch,
+    /// `prev_row_hash` does not link to the previous event (row removed or reordered).
+    ChainBreak,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -293,6 +257,10 @@ mod tests {
         let report = verify_chain_in_memory(&events);
         assert!(!report.valid);
         assert_eq!(report.events_checked, 2);
+        let failure = report.failure.unwrap();
+        assert_eq!(failure.index, 0);
+        assert_eq!(failure.kind, ChainFailureKind::HashMismatch);
+        assert_eq!(failure.actual_hash, "tampered_hash");
     }
 
     #[test]
@@ -331,6 +299,9 @@ mod tests {
         let report = verify_chain_in_memory(&events);
         assert!(!report.valid);
         assert_eq!(report.events_checked, 2);
+        let failure = report.failure.unwrap();
+        assert_eq!(failure.index, 1);
+        assert_eq!(failure.kind, ChainFailureKind::ChainBreak);
     }
 
     #[test]
