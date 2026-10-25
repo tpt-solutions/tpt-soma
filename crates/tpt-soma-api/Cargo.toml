@@ -9,23 +9,16 @@ repository.workspace = true
 homepage.workspace = true
 description = "HTTP + Arrow Flight API server with capability/audit/differential-privacy enforcement."
 readme = "README.md"
-keywords = ['api', 'arrow-flight', 'grpc', 'web', 'physiology']
+keywords = ['api', 'flight', 'grpc', 'web', 'physiology']
 categories = ['web-programming', 'science']
 
 [dependencies]
 tokio = { workspace = true }
 tonic = { workspace = true }
-arrow = { workspace = true }
-arrow-flight = { workspace = true }
-arrow-schema = { workspace = true }
-arrow-array = { workspace = true }
-arrow-ipc = { workspace = true }
-prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-prometheus = { workspace = true }
 uuid = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
@@ -42,6 +35,7 @@ tower-http = { workspace = true }
 bytes = { workspace = true }
 sqlx = { workspace = true }
 tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
+tpt-soma-flight = { path = "../tpt-soma-flight", version = "0.1.0" }
 tpt-soma-capability = { path = "../tpt-soma-capability", version = "0.1.0" }
 tpt-soma-audit = { path = "../tpt-soma-audit", version = "0.1.0" }
 tpt-soma-genomica = { path = "../tpt-soma-genomica", version = "0.1.0" }

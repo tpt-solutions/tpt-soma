@@ -10,7 +10,7 @@
 
 | Path | Description |
 |------|-------------|
-| `arrow/` | Apache Arrow schema definitions (Rust + Python) |
+| `arrow/` | Reference schema definitions (not compiled; the served schemas live in `crates/tpt-soma-api/src/flight.rs`, see ADR-008) |
 | `protobuf/` | Protobuf `.proto` files for service-to-service serialization |
 
 ## Naming Convention
