@@ -47,18 +47,42 @@
 
 ### 2.3 Phase 4 domain sub-modules: Oncology / Longevity & Aging /
 ###     Cardiovascular / autoimmune / infectious (Phase 4, ~202–204)
-- **Status:** deferred. `tpt-soma-pathos` ships metabolic & endocrine only.
-- **Plan:** each becomes its own `pathos::*` module building on the OSG and the
-  cross-talk solver; scope narrowly (one validated method per module) per the
-  established orchestrate-don't-reimplement pattern.
+- **Status:** **partially implemented** (code pass 2026-10-25).
+  - Oncology: `oncology::simulate_gompertz_growth` (Gompertz ODE on the
+    simulacrum solver, checked against the closed form) and
+    `oncology::recist_response` (RECIST 1.1 categories). The earlier TME and
+    immunotherapy proxies remain illustrative, not validated classifiers.
+  - Longevity: `longevity::fit_gompertz_hazard` (log-linear Gompertz fit,
+    recovers known parameters; mortality doubling time `ln 2 / b`). The
+    phenotypic-age proxy remains illustrative.
+  - Cardiovascular: `cardiovascular::windkessel_pressure_trace` (two-element
+    Windkessel; mean pressure equals `R · Q̄` over whole cycles).
+  - Infectious: `infectious::simulate_sir`, `basic_reproduction_number`,
+    `sir_final_size` (simulated final size matches the analytic relation).
+  - Autoimmune: `autoimmune::das28_crp` (published DAS28-CRP formula, worked
+    example checked) and `autoimmune::classify_das28` (EULAR bands).
+- **Still deferred:** epigenetic clocks and senescence tracking (longevity),
+  and any validated clinical classifier. Each needs a published method and
+  reference data before it counts as more than a proxy.
+- **Plan:** one validated method per module, built on the OSG and the
+  cross-talk solver, following the orchestrate-don't-reimplement pattern.
 
 ### 2.4 clinica: EHR/FHIR hardening + clinical trial design (Phase 4, ~207–208)
-- **Status:** deferred. Full resource coverage and trial logic not built;
-  `clinical_trial_cohorts` tables scaffolded, biomarker table + data class
-  seeded (migration 07).
-- **Plan:** extend the Phase 2 FHIR subset (`tpt-soma-organon`) as needed;
-  cohort-discovery/recruitment/ae-tracking logic layered on existing
-  `cohort_membership` + `clinical_trial_cohorts`.
+- **Status:** partially implemented (code pass 2026-10-25). `clinical_trial_cohorts`
+  tables scaffolded, biomarker table + data class seeded (migration 07).
+  - `trial::summarize_adverse_events`: AE counts by CTCAE-style grade 1–5,
+    grade ≥3, serious, and subjects with any AE.
+  - `trial::evaluate_eligibility` / `trial::screen_and_recruit`: inclusion and
+    exclusion criteria over subject features, screening in order to a target
+    enrollment, with shortfall reporting.
+  - Pure logic, no database access.
+- **Still deferred:** protocol design, persistence of trial results onto
+  `clinical_trial_cohorts`, and EHR/FHIR resource coverage beyond the Phase 2
+  subset. The FHIR scope has no written requirement yet, so it is not
+  hardened speculatively.
+- **Plan:** persist screening and AE outputs through the existing
+  `cohort_membership` and `clinical_trial_cohorts` tables, behind the Phase 0
+  capability and audit choke-points.
 
 ### 2.5 Wasm sandbox execution backend (Phase 4, ~217–218)
 - **Status:** **implemented.** `tpt-soma-sandbox` now provides a real WASM
@@ -73,9 +97,19 @@
   capability-gated exactly like the host API expects.
 
 ### 2.6 3D visualization / interactive systemic query builder (Phase 4, ~221–222)
-- **Status:** deferred.
-- **Plan:** map OSG macro nodes to a deck.gl/three.js whole-body renderer
-  reading the existing OSG topology; query builder drives the cross-talk solver.
+- **Status:** query-builder backend **implemented**; 3D renderer and interactive UI deferred.
+  - `crosstalk::run_systemic_query` simulates an OSG topology (node rows and
+    `cross_talk` edge rows) and reports the target node's final value, peak
+    and peak time. Nothing is persisted.
+  - `POST /api/v1/systemic/query` exposes it. It requires a `simulation_output`
+    token with at least `read` (an explicit `POLICY` entry in `auth.rs`, so it
+    is not an unlisted route), and every call is written to the audit ledger by
+    the router-wide middleware. Input errors return 400.
+- **Still deferred:** the deck.gl/three.js whole-body renderer. It needs
+  anatomical geometry that is not in the repo. The interactive query UI is
+  also open.
+- **Plan:** source anatomical geometry for the macro nodes first, then build the
+  UI on top of `POST /api/v1/systemic/query`.
 
 ### 2.7 Federated pilot w/ partner site + audit reconciliation (Phase 4, ~227, 232)
 - **Status:** deploy reuse done (~225); **cross-site ledger reconciliation
@@ -99,9 +133,31 @@
   Phase 0 DP module + capability/audit choke-points) exposes it.
 
 ### 2.9 End-to-end systemic query test + full-stack load test (Phase 4, ~238–239)
-- **Status:** deferred (need populated OSG + cross-talk run; target hardware).
+- **Status:** in-process end-to-end test **implemented**; DB-backed run and
+  load test still open.
+  - `crates/tpt-soma-simulacrum/tests/systemic_query.rs` runs OSG-shaped rows
+    through `build_from_topology` and `run_systemic_query`. It checks the
+    adipose → IGF-1 → breast chain against an uncoupled control, and checks
+    determinism.
+  - Still open: running the same query against a populated Plexus OSG
+    (needs `TEST_DATABASE_URL` and the Keystone extensions), and the
+    full-stack load test (needs target hardware).
 - **Plan:** extend `crates/tpt-soma-api/tests/e2e_flight.rs` and the
-  `scripts/loadtest` suite once 2.2/2.3 land.
+  `scripts/loadtest` suite once a populated OSG is available.
+
+### 2.10 Code pass notes (2026-10-25)
+- Topology loader: `crosstalk::build_from_topology` turns OSG node and
+  `cross_talk` edge rows into a runnable system, rejecting unknown kinds,
+  duplicate or dangling ids, non-`cross_talk` edges, and undefined couplings.
+  The canonical example is now built through this path.
+- Not touched in this pass: §2.1 (PyTorch/JAX bridge; the decision above
+  still holds until a concrete gradient-fitting use case exists), §2.2
+  (Plexus `create_edge` signature check; needs the deployed extension), §2.7
+  (partner-site pilot; operational), and the load tests (hardware).
+- Verification: `tpt-soma-simulacrum`, `tpt-soma-pathos`, `tpt-soma-clinica`,
+  and `tpt-soma-api` tests pass (the API run has 37 unit tests plus 16 in-memory
+  middleware tests; DB-backed tests are ignored), and clippy with `-D warnings`
+  is clean for these four crates.
 
 ## 3. Consequences
 - The roadmap's security/compliance requirements are never dropped by

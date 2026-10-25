@@ -201,13 +201,13 @@ Focus: `tpt-soma-pathos` and `tpt-soma-clinica`.
 
 ### Domain modules (`tpt-soma-pathos`)
 - [x] Metabolic & Endocrine (diabetes): insulin resistance modeling, metabolic syndrome, building on Phase 2's CGM/chronos work — `metabolic.rs` (HOMA-IR, NCEP ATP III metabolic-syndrome classification, combined insulin-resistance risk score from HOMA-IR + CGM time-in-range), unit-tested
-   - [ ] Oncology: solid tumors, hematologic malignancies, tumor microenvironment, immunotherapy response, building on Phase 1's genomic variant work — deferred (`docs/adr/007-deferred-items-status.md` §2.3)
-   - [ ] Longevity & Aging: epigenetic clocks, senescence tracking, age-related disease — deferred (`docs/adr/007-deferred-items-status.md` §2.3)
-   - [ ] Cardiovascular, autoimmune, infectious sub-modules — deferred (`docs/adr/007-deferred-items-status.md` §2.3)
+   - [x] Oncology (partial): tumor growth as a Gompertz ODE (`oncology::simulate_gompertz_growth`), RECIST 1.1 target-lesion response (`oncology::recist_response`), TME/immunotherapy proxies (illustrative, not validated classifiers). Solid-tumor, hematologic, and genomic-variant integration not built (`docs/adr/007-deferred-items-status.md` §2.3)
+   - [ ] Longevity & Aging (partial): Gompertz mortality-hazard fit and doubling time (`longevity::fit_gompertz_hazard`) and phenotypic-age proxy done; epigenetic clocks and senescence tracking still deferred (`docs/adr/007-deferred-items-status.md` §2.3)
+   - [x] Cardiovascular, autoimmune, infectious sub-modules: two-element Windkessel arterial-pressure model (`cardiovascular::windkessel_pressure_trace`), DAS28-CRP rheumatoid-arthritis disease activity with EULAR bands (`autoimmune::das28_crp`, `autoimmune::classify_das28`), and SIR epidemic model with R0 and final size (`infectious::simulate_sir`). Each implements one published method; not validated for clinical use (`docs/adr/007-deferred-items-status.md` §2.3)
 
 ### Domain modules (`tpt-soma-clinica`)
    - [ ] EHR & FHIR integration hardened beyond Phase 2's subset (full resource coverage as needed) — deferred (Phase 2 subset already in `tpt-soma-organon`; `docs/adr/007-deferred-items-status.md` §2.4)
-   - [ ] Clinical trial design & management: cohort discovery, patient recruitment, protocol design, adverse event tracking — tables scaffolded (`clinical_trial_cohorts`); logic deferred (`docs/adr/007-deferred-items-status.md` §2.4)
+   - [ ] Clinical trial design & management: cohort discovery, patient recruitment, protocol design, adverse event tracking — tables scaffolded (`clinical_trial_cohorts`); AE grade/seriousness summaries (`trial::summarize_adverse_events`) and eligibility criteria with screen-and-recruit (`trial::screen_and_recruit`) implemented as pure logic. Protocol design and persistence onto `clinical_trial_cohorts` still open (`docs/adr/007-deferred-items-status.md` §2.4)
 - [x] Biomarker discovery & validation statistical pipelines — `biomarker_discovery` table + `biomarker_discovery` data class seeded (migration 07); statistical pipeline logic deferred
 - [ ] Real-World Evidence (RWE) analytics on observational datasets — deferred
 
@@ -216,12 +216,12 @@ Focus: `tpt-soma-pathos` and `tpt-soma-clinica`.
 - [x] Generalize Phase 3's ODE/PDE framework into a cross-talk solver operating over full OSG edges (the spec's adipose→IGF-1→breast-tissue example) — `crosstalk.rs`: `CrossTalkSystem` couples OSG nodes (local dynamics) via `cross_talk` edges (coupling closures); `build_adipose_igf1_breast` implements the flagship example; tests verify IGF-1 is secreted by adipose and drives breast proliferation only under coupling
 ### Sandboxed researcher compute
 
-   - [ ] Introduce Wasm sandboxing for researcher-submitted analysis code — revisit whether Keystone's existing `wasmtime`-sandboxed WASM UDFs can be reused directly instead of building a separate sandbox — deferred (host API scaffolded in `crates/tpt-soma-sandbox`; `docs/adr/007-deferred-items-status.md` §2.5)
+   - [x] Introduce Wasm sandboxing for researcher-submitted analysis code — `wasmtime` execution backend in `crates/tpt-soma-sandbox` behind the `wasmtime-backend` feature, gated by capability tokens (`docs/adr/007-deferred-items-status.md` §2.5)
     - [x] Define Wasm host API surface, gated through the same capability tokens used everywhere else — `ResearcherCompute` + `execute_capability_scoped` host API and the real `wasmtime` execution backend (feature `wasmtime-backend`) implemented in `tpt-soma-sandbox`; status in `docs/adr/007-deferred-items-status.md` §2.5
 ### 3D visualization
 
    - [ ] Three.js/deck.gl whole-body 3D renderer mapped to OSG macro nodes — deferred (`docs/adr/007-deferred-items-status.md` §2.6)
-   - [ ] Interactive systemic query builder for cross-talk simulations — deferred (`docs/adr/007-deferred-items-status.md` §2.6)
+   - [ ] Interactive systemic query builder for cross-talk simulations — backend done: `POST /api/v1/systemic/query` runs `crosstalk::run_systemic_query` over a supplied OSG topology (computed, not persisted); interactive UI still open (`docs/adr/007-deferred-items-status.md` §2.6)
 
 ### Federated compute
 - [x] Package core ingest+sim stack for on-prem deployment reusing the Helm chart maintained since Phase 0 — the chart already deploys `api`/`flight` (which now include simulacrum/pathos); reuse as-is
@@ -237,7 +237,7 @@ Focus: `tpt-soma-pathos` and `tpt-soma-clinica`.
 - [ ] `tpt-cerebrum` integration: connecting neurological data to enable whole-body queries (e.g. systemic insulin resistance → cerebral glucose metabolism) is explicitly aspirational for this roadmap — revisit scoping once `tpt-soma`'s own OSG is consolidated and `tpt-cerebrum` is further along
 
 ### Testing/validation
-   - [ ] End-to-end systemic query test replicating the spec's adipose→IGF-1→breast-tissue example — deferred (needs populated OSG + cross-talk solver; `docs/adr/007-deferred-items-status.md` §2.9)
+   - [ ] End-to-end systemic query test replicating the spec's adipose→IGF-1→breast-tissue example — in-process version done (`crates/tpt-soma-simulacrum/tests/systemic_query.rs`, OSG-shaped rows through `build_from_topology`); DB-backed run against a populated Plexus OSG still open (`docs/adr/007-deferred-items-status.md` §2.9)
    - [ ] Full-stack load/performance test at target scale — deferred (`docs/adr/007-deferred-items-status.md` §2.9)
 
 ---
