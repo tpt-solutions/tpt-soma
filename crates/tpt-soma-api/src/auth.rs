@@ -260,6 +260,13 @@ const POLICY: &[(&str, &str, &[&str], &str)] = &[
         &["simulation_output"],
         "export",
     ),
+    // Phase 4: systemic query computes a trajectory summary without persisting it
+    (
+        "POST",
+        "/api/v1/systemic/query",
+        &["simulation_output"],
+        "read",
+    ),
 ];
 
 fn path_matches(path: &str, pattern: &str) -> bool {
@@ -554,6 +561,22 @@ mod tests {
 
         let export = token("genomic_variant", "cohort-a", "export");
         enforce_route_policy(&export, "POST", "/api/v1/cohorts/cohort-a/aggregate/count").unwrap();
+    }
+
+    #[test]
+    fn test_route_policy_systemic_query_requires_simulation_output() {
+        let sim = token("simulation_output", "cohort-a", "read");
+        enforce_route_policy(&sim, "POST", "/api/v1/systemic/query").unwrap();
+
+        let wrong_class = token("genomic_variant", "cohort-a", "read");
+        assert!(matches!(
+            enforce_route_policy(&wrong_class, "POST", "/api/v1/systemic/query").unwrap_err(),
+            AuthError::InsufficientScope
+        ));
+
+        // An export token outranks read, so it is accepted too.
+        let export = token("simulation_output", "cohort-a", "export");
+        enforce_route_policy(&export, "POST", "/api/v1/systemic/query").unwrap();
     }
 
     #[test]

@@ -150,6 +150,8 @@ impl ApiServer {
             )
             // Phase 3: simulation run + query + DP aggregate export
             .route("/api/v1/simulate", post(run_simulation))
+            // Phase 4: systemic query over an OSG topology (computed, not persisted)
+            .route("/api/v1/systemic/query", post(run_systemic_query))
             .route("/api/v1/simulations/:run_id", get(get_simulation))
             .route(
                 "/api/v1/simulations/:run_id/aggregate/count",
@@ -695,6 +697,80 @@ async fn get_cgm_variability(
     .map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
     Ok(axum::Json(variability))
+}
+
+// Phase 4: systemic query builder over the OSG cross-talk solver
+
+#[derive(serde::Deserialize)]
+struct SystemicNodeDto {
+    id: String,
+    kind: String,
+}
+
+#[derive(serde::Deserialize)]
+struct SystemicEdgeDto {
+    from: String,
+    to: String,
+    edge_type: String,
+}
+
+#[derive(serde::Deserialize)]
+struct SystemicQueryRequest {
+    nodes: Vec<SystemicNodeDto>,
+    edges: Vec<SystemicEdgeDto>,
+    target_node_id: String,
+    t0: f64,
+    dt: f64,
+    steps: usize,
+    adipose_secretion: f64,
+    igf1_clearance: f64,
+    igf1_growth: f64,
+}
+
+#[axum::debug_handler]
+async fn run_systemic_query(
+    axum::extract::Json(payload): axum::extract::Json<SystemicQueryRequest>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let query = crosstalk::SystemicQuery {
+        topology: crosstalk::OsTopology {
+            nodes: payload
+                .nodes
+                .into_iter()
+                .map(|n| crosstalk::OsNodeRow {
+                    id: n.id,
+                    kind: n.kind,
+                })
+                .collect(),
+            edges: payload
+                .edges
+                .into_iter()
+                .map(|e| crosstalk::OsEdgeRow {
+                    from: e.from,
+                    to: e.to,
+                    edge_type: e.edge_type,
+                })
+                .collect(),
+        },
+        params: crosstalk::CrossTalkParams {
+            adipose_secretion: payload.adipose_secretion,
+            igf1_clearance: payload.igf1_clearance,
+            igf1_growth: payload.igf1_growth,
+        },
+        target_node_id: payload.target_node_id,
+        t0: payload.t0,
+        dt: payload.dt,
+        steps: payload.steps,
+    };
+    // Every simulacrum input error is a caller error (unknown kind, dangling edge, bad window).
+    let result =
+        crosstalk::run_systemic_query(&query).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    Ok(axum::Json(serde_json::json!({
+        "target_node_id": result.target_node_id,
+        "final_value": result.final_value,
+        "peak_value": result.peak_value,
+        "peak_time": result.peak_time,
+        "samples": result.samples,
+    })))
 }
 
 // Cross-phase handler: Phase 1 samples + Phase 2 clinical/CGM records for one subject
