@@ -6,8 +6,10 @@
 //! insulin-resistance risk score. Later phases extend this with oncology,
 //! longevity, cardiovascular, autoimmune, and infectious sub-modules.
 
+pub mod autoimmune;
 pub mod cardiovascular;
 pub mod error;
+pub mod infectious;
 pub mod longevity;
 pub mod metabolic;
 pub mod oncology;

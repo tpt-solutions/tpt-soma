@@ -16,6 +16,7 @@ categories = ['science']
 tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
 tpt-soma-capability = { path = "../tpt-soma-capability", version = "0.1.0" }
 tpt-soma-audit = { path = "../tpt-soma-audit", version = "0.1.0" }
+tpt-soma-simulacrum = { path = "../tpt-soma-simulacrum", version = "0.1.0" }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

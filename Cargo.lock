@@ -5844,6 +5844,7 @@ dependencies = [
  "tpt-soma-audit",
  "tpt-soma-capability",
  "tpt-soma-core",
+ "tpt-soma-simulacrum",
  "tracing",
  "uuid",
 ]
