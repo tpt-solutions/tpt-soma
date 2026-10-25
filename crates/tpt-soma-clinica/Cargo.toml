@@ -24,3 +24,6 @@ chrono = { workspace = true }
 sqlx = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
