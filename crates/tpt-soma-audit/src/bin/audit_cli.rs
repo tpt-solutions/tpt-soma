@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 r#"
                 SELECT id, actor, resource_class, action, cohort_scope, timestamp, query_fingerprint, outcome
                 FROM audit_ledger
-                ORDER BY timestamp DESC
+                ORDER BY seq DESC
                 LIMIT $1
                 "#,
             )

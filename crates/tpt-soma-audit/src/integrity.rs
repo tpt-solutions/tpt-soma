@@ -1,5 +1,4 @@
-use crate::ledger::{AuditEvent, AuditLedger};
-use sha2::{Digest, Sha256};
+use crate::ledger::{AuditEvent, AuditLedger, compute_row_hash};
 
 pub async fn verify_chain(ledger: &AuditLedger) -> Result<ChainReport, IntegrityError> {
     let pool = &ledger.pool;
@@ -10,7 +9,7 @@ pub async fn verify_chain(ledger: &AuditLedger) -> Result<ChainReport, Integrity
         SELECT id, actor, resource_class, action, cohort_scope, timestamp,
                query_fingerprint, outcome, prev_row_hash, row_hash
         FROM audit_ledger
-        ORDER BY timestamp ASC
+        ORDER BY seq ASC
         "#,
     )
     .fetch_all(pool)
@@ -29,22 +28,8 @@ pub fn verify_chain_in_memory(events: &[AuditEvent]) -> ChainReport {
 
     for (i, event) in events.iter().enumerate() {
         // Recompute the expected hash
-        let mut hasher = Sha256::new();
-        if let Some(prev) = &prev_hash {
-            hasher.update(prev.as_bytes());
-        }
-        let payload = serde_json::json!({
-            "id": event.id,
-            "actor": event.actor,
-            "resource_class": event.resource_class,
-            "action": event.action,
-            "cohort_scope": event.cohort_scope,
-            "timestamp": event.timestamp,
-            "query_fingerprint": event.query_fingerprint,
-            "outcome": event.outcome,
-        });
-        hasher.update(serde_json::to_vec(&payload).unwrap());
-        let expected_hash = format!("{:x}", hasher.finalize());
+        let expected_hash =
+            compute_row_hash(prev_hash.as_deref(), event).expect("audit payload serialises");
 
         let kind = if event.row_hash != expected_hash {
             Some(ChainFailureKind::HashMismatch)
@@ -118,6 +103,7 @@ pub enum IntegrityError {
 mod tests {
     use super::*;
     use chrono::{DateTime, Utc};
+    use sha2::{Digest, Sha256};
     use uuid::Uuid;
 
     #[allow(clippy::too_many_arguments)]

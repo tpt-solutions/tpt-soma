@@ -115,7 +115,7 @@ async fn test_verify_chain_valid_database() -> Result<(), Box<dyn std::error::Er
     let report = verify_chain(&ledger).await?;
     assert!(report.valid);
     assert_eq!(report.events_checked, 3);
-    assert_eq!(report.tail_hash, Some(event3.row_hash.clone()));
+    assert_eq!(report.tail_hash, ledger.tail_hash().await?);
 
     Ok(())
 }
@@ -263,7 +263,7 @@ async fn test_verify_chain_single_event_database()
     let report = verify_chain(&ledger).await?;
     assert!(report.valid);
     assert_eq!(report.events_checked, 1);
-    assert_eq!(report.tail_hash, Some(event1.row_hash.clone()));
+    assert_eq!(report.tail_hash, ledger.tail_hash().await?);
 
     Ok(())
 }
@@ -346,7 +346,7 @@ async fn test_verify_chain_out_of_order_insertion()
     let report = verify_chain(&ledger).await?;
     assert!(report.valid);
     assert_eq!(report.events_checked, 3);
-    assert_eq!(report.tail_hash, Some(event3.row_hash.clone()));
+    assert_eq!(report.tail_hash, ledger.tail_hash().await?);
 
     Ok(())
 }
@@ -405,5 +405,45 @@ async fn test_audit_ledger_append_and_verify_integration()
     let tail = ledger.tail_hash().await?;
     assert_eq!(report.tail_hash, tail);
 
+    Ok(())
+}
+
+/// Regression: appends that run at the same time used to read the same tail
+/// hash and fork the chain. The advisory lock must serialise them.
+#[tokio::test]
+#[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
+async fn test_concurrent_appends_keep_chain_linear()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let (pool, ledger) = setup_test_ledger().await;
+    sqlx::query("DELETE FROM audit_ledger")
+        .execute(&pool)
+        .await?;
+
+    let ledger = std::sync::Arc::new(ledger);
+    let mut handles = Vec::new();
+    for i in 0..32 {
+        let ledger = ledger.clone();
+        handles.push(tokio::spawn(async move {
+            let event = make_test_event(
+                Uuid::new_v4(),
+                "researcher-c",
+                "genomic_variant",
+                "read",
+                vec!["cohort-c".to_string()],
+                Utc::now(),
+                &format!("query-{i}"),
+                "success",
+                None,
+            );
+            ledger.append(event).await
+        }));
+    }
+    for handle in handles {
+        handle.await??;
+    }
+
+    let report = verify_chain(&ledger).await?;
+    assert!(report.valid, "concurrent appends forked the chain");
+    assert_eq!(report.events_checked, 32);
     Ok(())
 }
