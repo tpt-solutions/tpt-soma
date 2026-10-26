@@ -242,6 +242,55 @@ Focus: `tpt-soma-pathos` and `tpt-soma-clinica`.
 
 ---
 
+## Platform review (2026-10-27) — status
+
+Fix order: correctness/security → verified bugs → CI → adoption. Items marked
+**verified** were reproduced against a real PostgreSQL 16 database or by running
+the code. Items marked *open* are not done.
+
+### A. Audit & privacy correctness (compliance claims depend on these)
+- [x] **verified** Audit chain forked under concurrency. `AuditLedger::append` read the tail and inserted in two statements. Appends now run in one transaction under `pg_advisory_xact_lock`. Regression test `test_concurrent_appends_keep_chain_linear` fails without the lock and passes with it.
+- [x] **verified** Audit chain could not verify from the database. The hash covered a nanosecond timestamp, but `TIMESTAMPTZ` stores microseconds. The hash now uses the truncated value. The chain is ordered by a new `seq` column (migration `20240101000011_audit_chain_seq.sql`), since `timestamp` is the request start time and not append order. Writer and verifier share `compute_row_hash`.
+- [x] Audit writes fail closed. `capability_middleware` awaits the append before releasing the response. On failure it returns 503 and withholds the payload. The Flight path maps this to `Unavailable`.
+- [x] DP budget is durable. Each export spends budget, awaits the `dp_budget` ledger row, and only then returns the noisy count (`release_dp_count`). On startup the spent budget is rebuilt from the ledger (`restore_dp_budget`). Test: `test_dp_spend_survives_restart`. The synchronous audit hook is no longer used by the server.
+- [x] Route policy is default-deny. An unlisted route returns 403. `every_registered_route_has_a_policy_entry` scans every route file and fails if one lacks a POLICY entry.
+- [x] `/health` and `/metrics` sit outside the token layer. Before this, Helm's `/health` probes were behind authentication and would have kept pods unready.
+- [ ] *open* Existing ledgers: rows written before this change have hashes that cannot be recomputed, and `dp_budget` rows written before this change use the older `cohort=…:epsilon=…` fingerprint (still parsed). Re-hash or reset the ledger before any real data is loaded. No PHI is loaded yet.
+- [x] **verified** DB tests were unrunnable. `test_pool` did not apply migrations, and `run_migrations` read `./migrations` relative to the working directory. Migrations are now embedded with `sqlx::migrate!`, which the container needs because its runtime image has no `WORKDIR`. Verified: the API binary finds its migrations when run from `C:\`.
+- [x] **verified** Tests could wipe a real database. Five DB-backed test helpers fell back to `postgres:postgres@localhost:5432`, while the tests delete rows. `TEST_DATABASE_URL` is now required (`tpt_soma_core::test_helpers::test_database_url`).
+
+### B. Verified bugs from the review
+- [x] **verified** Multipart uploads were capped at axum's 2 MB default, which rejects real VCF/h5ad files. A control test confirms the 413. The ingest routes now have an explicit 256 MB cap (`apply_body_limit`), with tests for under and over the cap.
+- [x] **verified** Frontend CI could not pass. `npm ci` refused the lockfile (`package.json` and `package-lock.json` were out of sync; 522 transitive `deck.gl` packages were missing from the lock). The lock is regenerated, and the lock change needs review.
+- [x] Frontend type errors fixed: `deck.gl/layers` import path, unused `React` imports, tooltip and colour types.
+- [x] Frontend lint: ESLint crashed with no config. Added `eslint.config.js` (ESLint 9, typescript-eslint, react-hooks). `react-hooks/set-state-in-effect` is a warning until the data loaders move out of effects (see below).
+- [x] Frontend test: vitest had no tests. Added `src/html.test.ts`.
+- [x] **verified** Stored HTML injection in the UMAP tooltip. `cell_id` and `cluster` from uploaded data were interpolated into tooltip HTML unescaped. They are now escaped with `escapeHtml`.
+- [x] **verified** `tpt-soma-capability list-classes` showed only phase 0 classes. All entry points now call `DataClassRegistry::seed_all()`, which replaces the duplicated four-call blocks.
+
+### C. CI
+- [x] Audit DB job on a Postgres 16 service container: `audit-database` in `.github/workflows/ci.yml`. It runs the audit chain, concurrency and DP-restore tests, single-threaded.
+- [x] Feature job for `tpt-soma-sandbox --features wasmtime-backend` (`sandbox-wasmtime`). Verified locally: 6 tests pass.
+- [ ] *open* Keystone-backed DB job: runs the full `--ignored` suite (cross-phase, OSG, trials, ingest). The image `ghcr.io/tpt-keystone-db/tpt-keystone` is private, and a pull without access returns `denied`. Needs a `KEYSTONE_GHCR_TOKEN` secret. Decision needed.
+- [ ] *open* Re-run the Helm probes against a live API once the stack is available. The `/health` fix is verified by reading the router, not by a live probe.
+
+### D. Adoption
+- [x] `examples/README.md`: five walkthroughs. Steps 1–2 (build, key, token) were run locally. Steps 3–5 need the Keystone image.
+- [x] Organ-panel CSV template at `docs/templates/organ-function-panel.csv`. `test_organ_function_csv_template_parses` keeps it accepted by the real parser.
+- [x] `CONTRIBUTING.md`. `SECURITY.md` is written, but its reporting contact is a placeholder to fill in.
+- [x] Data-class seeding consolidated (see B).
+- [ ] *open* One-command demo (Compose up, synthetic data, token, sample query). Needs the Keystone image to verify end to end.
+- [ ] *open* Token policy explainer (`tpt-soma-admin explain …`). The policy engine would need a reason-returning variant.
+- [ ] *open* `.gitattributes` (`* text=auto`). `core.autocrlf` is already `true` on this machine. Set the rule after deciding the repo's line-ending policy, because it affects every file.
+- [ ] *open* OpenAPI spec and generated TypeScript client.
+- [ ] *open* Budget dry-run endpoint (`GET /api/v1/cohorts/:id/budget`). Needs a POLICY entry; the coverage test enforces it.
+
+### E. Follow-ups raised while doing the above
+- [ ] *open* Refactor `App.tsx` data loading out of effects (`react-hooks/set-state-in-effect`, currently a warning).
+- [ ] *open* Line endings: `cargo fmt` (`newline_style = "Unix"`) rewrote CRLF to LF in about 50 files that this work did not otherwise change. Content is identical (`git diff --ignore-cr-at-eol` is empty for them). Restore those with `git checkout --` after review, or accept the LF versions.
+- [ ] *open* Disk: C: was at 0 GB free during this work. `target/` alone is about 10 GB. Free space before the next full build.
+- [ ] *open* `Multipart` cap is per request, not per user. A rate limit is still missing.
+
 ## Cross-phase dependencies
 
 1. **Capability engine + audit ledger (Phase 0)** underpin every later phase's security — each phase *extends* the data-class taxonomy and audit coverage, never rebuilds the core crypto/ledger.
