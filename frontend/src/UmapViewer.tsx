@@ -1,6 +1,5 @@
-import React from 'react';
-import DeckGL from 'deck.gl';
-import { ScatterplotLayer } from 'deck.gl/layers';
+import DeckGL, { ScatterplotLayer } from 'deck.gl';
+import { escapeHtml } from './html';
 
 interface UmapPoint {
   cell_id: string;
@@ -17,7 +16,9 @@ interface UmapViewerProps {
   loading: boolean;
 }
 
-const colorPalette: number[][] = [
+type Rgba = [number, number, number, number];
+
+const colorPalette: [number, number, number][] = [
   [228, 26, 28],
   [55, 126, 184],
   [77, 175, 74],
@@ -44,7 +45,7 @@ function UmapViewer({
     ? data.filter(d => d.cluster === selectedCluster)
     : data;
 
-  const colorMap: Record<string, number[]> = {};
+  const colorMap: Record<string, [number, number, number]> = {};
   clusters.forEach((c, i) => {
     colorMap[c] = colorPalette[i % colorPalette.length];
   });
@@ -64,7 +65,10 @@ function UmapViewer({
       id: 'umap-scatter',
       data: filteredData,
       getPosition: (d: UmapPoint) => [d.umap1, d.umap2, 0] as [number, number, number],
-      getFillColor: (d: UmapPoint) => colorMap[d.cluster] || [0, 0, 0, 255],
+      getFillColor: (d: UmapPoint): Rgba => {
+        const rgb = colorMap[d.cluster];
+        return rgb ? [...rgb, 255] : [0, 0, 0, 255];
+      },
       getRadius: 100,
       radiusMinPixels: 3,
       radiusMaxPixels: 10,
@@ -100,10 +104,11 @@ function UmapViewer({
           }}
           controller={true}
           layers={layers}
-          getTooltip={({ object }: { object: UmapPoint | null }) => {
+          getTooltip={({ object }: { object?: UmapPoint | null }) => {
             if (!object) return null;
+            // Values come from uploaded data, so they are escaped before entering HTML.
             return {
-              html: `<div><b>Cell:</b> ${object.cell_id}<br/><b>Cluster:</b> ${object.cluster}</div>`,
+              html: `<div><b>Cell:</b> ${escapeHtml(object.cell_id)}<br/><b>Cluster:</b> ${escapeHtml(object.cluster)}</div>`,
               style: { backgroundColor: 'white', padding: '8px', borderRadius: '4px' },
             };
           }}
