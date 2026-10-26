@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 import UmapViewer from './UmapViewer';
 import PhysiologyPanel from './PhysiologyPanel';
@@ -9,6 +9,18 @@ interface Sample {
   patient_id: string | null;
   source: string;
   dataset_provenance: string | null;
+}
+
+interface JoinRow {
+  variant_id: string;
+  chromosome: string;
+  position: number;
+  reference: string;
+  alternate: string;
+  rsid: string | null;
+  cell_id: string;
+  gene_id: string;
+  count: number;
 }
 
 interface Variant {
@@ -307,7 +319,7 @@ function VariantTable({ variants, loading }: { variants: Variant[]; loading: boo
 function JoinViewer({ sampleId, token }: { sampleId: string; token: string }) {
   const [variantId, setVariantId] = useState('');
   const [geneId, setGeneId] = useState('');
-  const [joinData, setJoinData] = useState<any[]>([]);
+  const [joinData, setJoinData] = useState<JoinRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -374,7 +386,7 @@ function JoinViewer({ sampleId, token }: { sampleId: string; token: string }) {
               </tr>
             </thead>
             <tbody>
-              {joinData.map((row: any, i: number) => (
+              {joinData.map((row, i) => (
                 <tr key={i}>
                   <td>{row.variant_id}</td>
                   <td>{row.chromosome}</td>
