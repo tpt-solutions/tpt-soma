@@ -116,3 +116,54 @@ jobs:
         run: |
           apt-get update && apt-get install -y protobuf-compiler
           protoc --proto_path=schemas/protobuf schemas/protobuf/*.proto --python_out=/tmp/schema_py --rust_out=/tmp/schema_rs
+
+  audit-database:
+    name: Audit ledger (PostgreSQL)
+    runs-on: ubuntu-latest
+    # Plain PostgreSQL with the audit table only. The Keystone-backed migrations
+    # need the private tpt-keystone image, so those tests run elsewhere.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tpt_soma_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/tpt_soma_test
+      TEST_SKIP_MIGRATIONS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Apply audit schema
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d tpt_soma_test -v ON_ERROR_STOP=1 \
+            -f crates/tpt-soma-core/migrations/20240101000001_init_audit.sql \
+            -f crates/tpt-soma-core/migrations/20240101000011_audit_chain_seq.sql
+      - name: Audit chain, concurrency and DP-budget restore
+        # One thread: the tests share a table and delete rows between cases.
+        run: |
+          cargo test -p tpt-soma-audit -- --include-ignored --test-threads=1
+          cargo test -p tpt-soma-api --lib db_tests -- --include-ignored --test-threads=1
+
+  sandbox-wasmtime:
+    name: Sandbox (wasmtime backend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p tpt-soma-sandbox --features wasmtime-backend
