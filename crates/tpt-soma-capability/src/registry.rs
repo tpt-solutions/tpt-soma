@@ -33,6 +33,16 @@ impl DataClassRegistry {
         self.classes.values().collect()
     }
 
+    /// Registers every phase's data classes. Each entry point that builds a registry
+    /// calls this, so none can drift to a subset (`list-classes` once showed only
+    /// phase 0).
+    pub fn seed_all(&mut self) {
+        self.seed_phase0();
+        self.seed_phase2();
+        self.seed_phase3();
+        self.seed_phase4();
+    }
+
     pub fn seed_phase0(&mut self) {
         let seeds = [
             (
@@ -153,6 +163,15 @@ mod tests {
         let mut registry = DataClassRegistry::default();
         registry.seed_phase3();
         assert!(registry.get("simulation_output").is_some());
+    }
+
+    #[test]
+    fn test_seed_all_registers_every_phase() {
+        let mut registry = DataClassRegistry::default();
+        registry.seed_all();
+        assert!(registry.get("genomic_variant").is_some());
+        assert!(registry.get("simulation_output").is_some());
+        assert!(registry.get("clinical_trial").is_some());
     }
 
     #[test]

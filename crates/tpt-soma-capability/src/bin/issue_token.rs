@@ -92,10 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let backend = LocalSigningBackend::from_bytes(&key_arr);
 
             let mut registry = DataClassRegistry::default();
-            registry.seed_phase0();
-            registry.seed_phase2();
-            registry.seed_phase3();
-            registry.seed_phase4();
+            registry.seed_all();
 
             if registry.get(&resource_class).is_none() {
                 eprintln!(
@@ -135,7 +132,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::ListClasses => {
             let mut registry = DataClassRegistry::default();
-            registry.seed_phase0();
+            registry.seed_all();
 
             println!("Registered data classes:");
             for class in registry.list() {
