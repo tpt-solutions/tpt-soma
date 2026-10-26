@@ -11,9 +11,7 @@ use tpt_soma_core::dp::DifferentialPrivacyService;
 
 async fn build_test_app() -> Result<(Router, SocketAddr), Box<dyn std::error::Error + Send + Sync>>
 {
-    let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://postgres:postgres@localhost:5432/tpt_soma_test".to_string()
-    });
+    let database_url = tpt_soma_core::test_helpers::test_database_url();
 
     let pool = create_pool(&database_url).await?;
     run_migrations(&pool).await?;

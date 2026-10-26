@@ -33,12 +33,14 @@ pub struct Claims {
     pub nonce: Vec<u8>,
 }
 
+/// Writes a `dp_budget` spend row. Callers await this before releasing a noisy
+/// result, so a budget that cannot be recorded is never spent unseen.
 pub async fn record_dp_budget_spend(
-    audit_ledger: &Arc<AuditLedger>,
+    audit_ledger: &AuditLedger,
     actor: &str,
     cohort: &str,
     epsilon_spent: f64,
-) {
+) -> Result<(), tpt_soma_audit::ledger::AuditError> {
     let event = AuditEvent {
         id: Uuid::new_v4(),
         actor: actor.to_string(),
@@ -46,37 +48,50 @@ pub async fn record_dp_budget_spend(
         action: "spend".to_string(),
         cohort_scope: vec![cohort.to_string()],
         timestamp: Utc::now(),
-        query_fingerprint: format!(
-            "dp_budget_spend:cohort={}:epsilon={}",
-            cohort, epsilon_spent
-        ),
+        query_fingerprint: dp_spend_fingerprint(epsilon_spent),
         outcome: "success".to_string(),
         prev_row_hash: None,
         row_hash: String::new(),
     };
-    let _ = audit_ledger.append(event).await;
+    audit_ledger.append(event).await
 }
 
-pub async fn record_dp_budget_spend_with_actor(
-    audit_ledger: &Arc<AuditLedger>,
-    actor: &str,
-    cohort: &str,
-    _epsilon_spent: f64,
-    query_fingerprint: &str,
-) {
-    let event = AuditEvent {
-        id: Uuid::new_v4(),
-        actor: actor.to_string(),
-        resource_class: "dp_budget".to_string(),
-        action: "spend".to_string(),
-        cohort_scope: vec![cohort.to_string()],
-        timestamp: Utc::now(),
-        query_fingerprint: query_fingerprint.to_string(),
-        outcome: "success".to_string(),
-        prev_row_hash: None,
-        row_hash: String::new(),
-    };
-    let _ = audit_ledger.append(event).await;
+/// Fingerprint layout is read back by [`restore_dp_budget`]; change both together.
+fn dp_spend_fingerprint(epsilon_spent: f64) -> String {
+    format!("dp_budget_spend:epsilon={}", epsilon_spent)
+}
+
+/// Rebuilds each cohort's spent epsilon from the `dp_budget` rows. Without this,
+/// a restart or a second replica starts every cohort with a full budget.
+/// Returns the number of spend rows applied.
+pub async fn restore_dp_budget(
+    audit_ledger: &AuditLedger,
+    dp: &mut tpt_soma_core::DifferentialPrivacyService,
+) -> Result<usize, String> {
+    let rows = sqlx::query_as::<_, (Option<String>, String)>(
+        r#"
+        SELECT cohort_scope[1], query_fingerprint
+        FROM audit_ledger
+        WHERE resource_class = 'dp_budget' AND action = 'spend' AND outcome = 'success'
+        ORDER BY seq ASC
+        "#,
+    )
+    .fetch_all(&audit_ledger.pool)
+    .await
+    .map_err(|e| format!("reading dp_budget rows: {e}"))?;
+
+    let mut applied = 0;
+    for (cohort, fingerprint) in rows {
+        let cohort = cohort.ok_or("dp_budget row has no cohort")?;
+        // Accepts the current layout and the older `cohort=…:epsilon=…` one.
+        let epsilon = fingerprint
+            .rsplit_once("epsilon=")
+            .and_then(|(_, value)| value.parse::<f64>().ok())
+            .ok_or_else(|| format!("unrecognised dp_budget fingerprint: {fingerprint}"))?;
+        dp.restore_spend(&cohort, epsilon);
+        applied += 1;
+    }
+    Ok(applied)
 }
 
 pub async fn authenticate_bearer(
@@ -346,8 +361,11 @@ pub fn enforce_route_policy(
     method: &str,
     path: &str,
 ) -> Result<(), AuthError> {
+    // Default deny: a route without a POLICY entry is refused for every token.
+    // Adding a route means adding its policy entry; the route-coverage test in
+    // `server.rs` fails until that is done.
     let Some(required) = required_capability_for(method, path) else {
-        return Ok(());
+        return Err(AuthError::InsufficientScope);
     };
 
     if !required
@@ -436,11 +454,12 @@ pub async fn capability_middleware(
         "failure".to_string()
     };
 
-    // Write to audit ledger (fire and forget for performance)
-    let audit_ledger = state.audit_ledger.clone();
-    tokio::spawn(async move {
-        let _ = audit_ledger.append(audit_event).await;
-    });
+    // Fail closed: the response is released only once its audit row is durable.
+    // If the ledger is unavailable, the caller gets no payload.
+    if let Err(err) = state.audit_ledger.append(audit_event).await {
+        tracing::error!(error = %err, "audit append failed; withholding response");
+        return Err(AuthError::AuditUnavailable);
+    }
 
     Ok(response)
 }
@@ -472,6 +491,8 @@ pub enum AuthError {
     TokenRevoked,
     #[error("insufficient scope")]
     InsufficientScope,
+    #[error("audit ledger unavailable")]
+    AuditUnavailable,
 }
 
 impl IntoResponse for AuthError {
@@ -488,6 +509,10 @@ impl IntoResponse for AuthError {
             AuthError::TokenExpired => (StatusCode::UNAUTHORIZED, "Token expired"),
             AuthError::TokenRevoked => (StatusCode::UNAUTHORIZED, "Token revoked"),
             AuthError::InsufficientScope => (StatusCode::FORBIDDEN, "Insufficient scope"),
+            AuthError::AuditUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Audit ledger unavailable; response withheld",
+            ),
         };
         (status, message).into_response()
     }
@@ -649,9 +674,10 @@ mod tests {
     }
 
     #[test]
-    fn test_route_policy_unmatched_route_allowed() {
-        let t = token("genomic_variant", "cohort-a", "read");
-        enforce_route_policy(&t, "GET", "/health").unwrap();
+    fn test_route_policy_unmatched_route_denied() {
+        // Default deny: a route with no POLICY entry is refused for every token.
+        let t = token("genomic_variant", "cohort-a", "admin");
+        assert!(enforce_route_policy(&t, "GET", "/api/v1/not-a-real-route").is_err());
     }
 
     #[test]
@@ -700,5 +726,32 @@ mod tests {
         let mut t = token("genomic_variant", "cohort-a", "read");
         t.graph_scope = Some(vec!["*".to_string()]);
         assert!(graph_scope_allows(&t, "node-anything"));
+    }
+}
+
+#[cfg(test)]
+mod db_tests {
+    use super::*;
+
+    /// A fresh service stands in for a restarted process. The spends must still
+    /// count against the cohort's budget.
+    #[tokio::test]
+    #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
+    async fn test_dp_spend_survives_restart() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+    {
+        let pool = tpt_soma_core::test_helpers::test_pool().await?;
+        let ledger = AuditLedger::new(pool.clone());
+        sqlx::query("DELETE FROM audit_ledger")
+            .execute(&pool)
+            .await?;
+
+        record_dp_budget_spend(&ledger, "researcher-1", "cohort-restart", 0.4).await?;
+        record_dp_budget_spend(&ledger, "researcher-1", "cohort-restart", 0.3).await?;
+
+        let mut restarted = tpt_soma_core::DifferentialPrivacyService::new(1.0);
+        let applied = restore_dp_budget(&ledger, &mut restarted).await?;
+        assert_eq!(applied, 2);
+        assert!((restarted.remaining_budget("cohort-restart") - 0.3).abs() < 1e-9);
+        Ok(())
     }
 }

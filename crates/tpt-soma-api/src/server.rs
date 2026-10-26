@@ -1,5 +1,39 @@
-use crate::auth::{AuthState, capability_middleware};
+use crate::auth::{AuthState, capability_middleware, record_dp_budget_spend, restore_dp_budget};
 use crate::error::{ApiError, Result};
+use axum::extract::DefaultBodyLimit;
+
+/// Largest accepted request body. axum 0.8 puts no limit on multipart uploads by
+/// default, so without this cap one client could stream an unbounded body into
+/// memory. The cap is set above the largest expected VCF or h5ad file.
+const MAX_REQUEST_BODY_BYTES: usize = 256 * 1024 * 1024;
+
+fn apply_body_limit<S: Clone + Send + Sync + 'static>(
+    router: Router<S>,
+    max_bytes: usize,
+) -> Router<S> {
+    router.layer(DefaultBodyLimit::max(max_bytes))
+}
+
+/// Spends epsilon, records the spend in the ledger, and only then returns a
+/// noisy count. The ledger write is awaited before anything is released, so a
+/// spend that cannot be recorded never produces output. Holding the lock across
+/// the write also stops concurrent exports from overspending a cohort's budget.
+async fn release_dp_count(
+    state: &AuthState,
+    cohort: &str,
+    actor: &str,
+    count: usize,
+    sensitivity: f64,
+) -> Result<f64> {
+    let mut dp = state.dp_service.lock().await;
+    dp.spend_budget(cohort, actor, sensitivity)?;
+    record_dp_budget_spend(&state.audit_ledger, actor, cohort, sensitivity)
+        .await
+        .map_err(|e| {
+            ApiError::Internal(format!("audit ledger unavailable; export withheld: {e}"))
+        })?;
+    Ok(dp.noisy_count(count, sensitivity))
+}
 use axum::{
     Router, middleware,
     response::IntoResponse,
@@ -43,24 +77,15 @@ pub struct ApiServer {
 
 impl ApiServer {
     pub async fn run(self) -> Result<()> {
-        let dp_service = Arc::new(tokio::sync::Mutex::new(
-            DifferentialPrivacyService::new(self.dp_epsilon).with_audit_hook(Arc::new({
-                let audit_ledger = self.audit_ledger.clone();
-                move |cohort, epsilon_spent, actor| {
-                    let ledger = audit_ledger.clone();
-                    let actor = actor.clone();
-                    tokio::spawn(async move {
-                        let _ = crate::auth::record_dp_budget_spend(
-                            &ledger,
-                            &actor,
-                            &cohort,
-                            epsilon_spent,
-                        )
-                        .await;
-                    });
-                }
-            })),
-        ));
+        let mut dp = DifferentialPrivacyService::new(self.dp_epsilon);
+        let restored = restore_dp_budget(&self.audit_ledger, &mut dp)
+            .await
+            .map_err(ApiError::Internal)?;
+        tracing::info!(
+            restored,
+            "restored differential-privacy spend from audit ledger"
+        );
+        let dp_service = Arc::new(tokio::sync::Mutex::new(dp));
 
         let auth_state = Arc::new(AuthState {
             pool: self.pool.clone(),
@@ -79,8 +104,6 @@ impl ApiServer {
             .with_state(self.object_store.clone());
 
         let app = Router::new()
-            .route("/health", get(health_check))
-            .route("/metrics", get(metrics_handler))
             // Ingest routes
             .nest("/api/v1", ingest_router)
             // Genomica routes
@@ -176,6 +199,13 @@ impl ApiServer {
                 capability_middleware,
             ))
             .with_state(auth_state);
+
+        // Probes and metrics sit outside the capability layer, so orchestrators
+        // can reach them without a token.
+        let public = Router::new()
+            .route("/health", get(health_check))
+            .route("/metrics", get(metrics_handler));
+        let app = apply_body_limit(app.merge(public), MAX_REQUEST_BODY_BYTES);
 
         let listener = tokio::net::TcpListener::bind(self.addr).await?;
         axum::serve(listener, app).await?;
@@ -297,9 +327,14 @@ async fn cohort_aggregate_count(
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let mut dp = state.dp_service.lock().await;
-    let noisy_count =
-        dp.cohort_aggregate_export(&payload.cohort_id, "api", count as usize, sensitivity)?;
+    let noisy_count = release_dp_count(
+        &state,
+        &payload.cohort_id,
+        "api",
+        count as usize,
+        sensitivity,
+    )
+    .await?;
 
     // NOTE: only the noisy count leaves the process. The true count is never
     // returned, otherwise differential privacy would be defeated.
@@ -1056,10 +1091,14 @@ async fn simulation_aggregate_count(
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
     let sensitivity = payload.sensitivity.unwrap_or(1.0);
-    let mut dp = state.dp_service.lock().await;
-    let noisy = dp
-        .cohort_aggregate_export(&payload.run_id, "simulation", count as usize, sensitivity)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let noisy = release_dp_count(
+        &state,
+        &payload.run_id,
+        "simulation",
+        count as usize,
+        sensitivity,
+    )
+    .await?;
     Ok(axum::Json(serde_json::json!({
         "run_id": payload.run_id,
         "noisy_count": noisy,
@@ -1109,7 +1148,7 @@ async fn cross_domain_aggregate_count(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let domains = vec![
+    let domains = [
         ("cohort_membership".to_string(), sample_count as usize),
         ("genomic_variant".to_string(), variant_count as usize),
         (
@@ -1119,10 +1158,8 @@ async fn cross_domain_aggregate_count(
     ];
 
     let sensitivity = payload.sensitivity.unwrap_or(1.0);
-    let mut dp = state.dp_service.lock().await;
-    let noisy = dp
-        .cross_domain_aggregate_export(&payload.cohort_id, "api", &domains, sensitivity)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let total: usize = domains.iter().map(|(_, count)| *count).sum();
+    let noisy = release_dp_count(&state, &payload.cohort_id, "api", total, sensitivity).await?;
 
     Ok(axum::Json(serde_json::json!({
         "cohort_id": payload.cohort_id,
@@ -1141,4 +1178,120 @@ async fn metrics_handler() -> impl IntoResponse {
         .header("Content-Type", crate::metrics::CONTENT_TYPE)
         .body(axum::body::Body::from(crate::metrics::render()))
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::required_capability_for;
+    use axum::body::Body;
+    use axum::extract::Multipart;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::post;
+    use tower::ServiceExt;
+
+    /// `(method, path)` for each `.route(...)` call in a source file. Only the
+    /// text before the test module is scanned, so this test cannot read itself.
+    fn registered_routes(source: &str, prefix: &str) -> Vec<(&'static str, String)> {
+        let source = source.split("#[cfg(test)]").next().unwrap_or(source);
+        let mut routes = Vec::new();
+        for part in source.split(".route(").skip(1) {
+            let head = part.get(..200).unwrap_or(part);
+            let Some(path) = head.split('"').nth(1) else {
+                continue;
+            };
+            let method = match (head.find("get("), head.find("post(")) {
+                (Some(g), Some(p)) if g < p => "GET",
+                (Some(_), Some(_)) | (None, Some(_)) => "POST",
+                (Some(_), None) => "GET",
+                (None, None) => continue,
+            };
+            routes.push((method, format!("{prefix}{path}")));
+        }
+        routes
+    }
+
+    /// Replaces `:param` segments with a concrete value the policy patterns match.
+    fn concrete(path: &str) -> String {
+        path.split('/')
+            .map(|seg| if seg.starts_with(':') { "x" } else { seg })
+            .collect::<Vec<_>>()
+            .join("/")
+    }
+
+    #[test]
+    fn every_registered_route_has_a_policy_entry() {
+        let mut routes = registered_routes(include_str!("server.rs"), "");
+        routes.extend(registered_routes(
+            include_str!("../../tpt-soma-ingest/src/endpoint.rs"),
+            "/api/v1",
+        ));
+        routes.retain(|(_, path)| path.starts_with("/api/v1"));
+        assert!(routes.len() >= 30, "route scan found only {}", routes.len());
+
+        let uncovered: Vec<_> = routes
+            .iter()
+            .filter(|(method, path)| required_capability_for(method, &concrete(path)).is_none())
+            .collect();
+        assert!(
+            uncovered.is_empty(),
+            "routes without a POLICY entry: {uncovered:?}"
+        );
+    }
+
+    fn upload_request(size: usize) -> Request<Body> {
+        let boundary = "tptsomaboundary";
+        let mut body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"big.vcf\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+        )
+        .into_bytes();
+        body.extend(std::iter::repeat_n(b'x', size));
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        Request::builder()
+            .method("POST")
+            .uri("/upload")
+            .header(
+                "content-type",
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(Body::from(body))
+            .unwrap()
+    }
+
+    /// Reads every part in full. Limit errors surface here as 413, because the
+    /// size check runs while the body is read.
+    async fn upload(
+        mut multipart: Multipart,
+    ) -> std::result::Result<&'static str, (StatusCode, String)> {
+        let too_large = |e: axum::extract::multipart::MultipartError| {
+            (StatusCode::PAYLOAD_TOO_LARGE, e.to_string())
+        };
+        while let Some(field) = multipart.next_field().await.map_err(too_large)? {
+            field.bytes().await.map_err(too_large)?;
+        }
+        Ok("ok")
+    }
+
+    /// Control: axum's own 2 MB default rejects a 3 MB upload. This is the limit
+    /// that rejected real VCF and h5ad files before the cap was raised.
+    #[tokio::test]
+    async fn default_multipart_limit_is_2_mb() {
+        let app = Router::new().route("/upload", post(upload));
+        let response = app.oneshot(upload_request(3 * 1024 * 1024)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn body_limit_rejects_uploads_over_the_cap() {
+        let app = apply_body_limit(Router::new().route("/upload", post(upload)), 1024 * 1024);
+        let response = app.oneshot(upload_request(3 * 1024 * 1024)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
+    async fn body_limit_admits_uploads_under_the_cap() {
+        let app = apply_body_limit(Router::new().route("/upload", post(upload)), 1024 * 1024);
+        let response = app.oneshot(upload_request(512 * 1024)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }

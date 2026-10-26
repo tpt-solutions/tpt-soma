@@ -64,10 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let store = ObjectStoreClient::from_env();
     let mut registry = DataClassRegistry::default();
-    registry.seed_phase0();
-    registry.seed_phase2();
-    registry.seed_phase3();
-    registry.seed_phase4();
+    registry.seed_all();
 
     let signing_key =
         tpt_soma_api::secrets::load_signing_key(args.capability_root_key_path.as_deref())?;

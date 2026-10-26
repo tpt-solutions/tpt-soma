@@ -92,6 +92,7 @@ fn auth_error_to_status(e: AuthError) -> Status {
         AuthError::TokenExpired => (tonic::Code::Unauthenticated, "token expired"),
         AuthError::TokenRevoked => (tonic::Code::Unauthenticated, "token revoked"),
         AuthError::InsufficientScope => (tonic::Code::PermissionDenied, "insufficient scope"),
+        AuthError::AuditUnavailable => (tonic::Code::Unavailable, "audit ledger unavailable"),
     };
     Status::new(code, msg)
 }
