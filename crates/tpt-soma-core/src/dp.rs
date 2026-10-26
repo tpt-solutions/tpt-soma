@@ -41,6 +41,12 @@ impl DifferentialPrivacy {
         count as f64 + self.laplace_noise(sensitivity)
     }
 
+    /// Adds epsilon that an earlier process already spent, read back from the
+    /// audit ledger. No budget check: the spend has already happened.
+    pub fn restore_spend(&mut self, cohort: &str, amount: f64) {
+        *self.spent.entry(cohort.to_string()).or_insert(0.0) += amount;
+    }
+
     pub fn spend_budget(&mut self, cohort: &str, amount: f64) -> Result<BudgetSpend, BudgetError> {
         let current = self.spent.entry(cohort.to_string()).or_insert(0.0);
         if *current + amount > self.epsilon {
@@ -67,6 +73,14 @@ impl DifferentialPrivacyService {
         }
     }
 
+    /// Restores spend recorded in an earlier process. See [`DifferentialPrivacy::restore_spend`].
+    pub fn restore_spend(&mut self, cohort: &str, amount: f64) {
+        self.engine.restore_spend(cohort, amount);
+    }
+
+    /// Observes each spend. The hook is synchronous, so it cannot wait on a
+    /// database write. Anything that must be durable before a result is released
+    /// (the API does this) has to be awaited by the caller instead.
     pub fn with_audit_hook(mut self, hook: BudgetAuditHook) -> Self {
         self.on_spend = Some(hook);
         self
@@ -157,6 +171,18 @@ mod tests {
         }
         let mean = sum / 1000.0;
         assert!(mean > 40.0 && mean < 60.0, "mean={}", mean);
+    }
+
+    #[test]
+    fn test_restored_spend_counts_against_budget() {
+        let mut service = DifferentialPrivacyService::new(1.0);
+        service.restore_spend("cohort-a", 0.9);
+        assert!((service.remaining_budget("cohort-a") - 0.1).abs() < 1e-12);
+        assert!(
+            service
+                .spend_budget("cohort-a", "researcher-1", 0.2)
+                .is_err()
+        );
     }
 
     #[test]
