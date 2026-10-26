@@ -1,4 +1,4 @@
-use sqlx::migrate::{MigrateError, Migrator};
+use sqlx::migrate::MigrateError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -20,8 +20,10 @@ pub async fn create_pool(database_url: &str) -> Result<PgPool> {
     Ok(pool)
 }
 
+/// Applies the migrations embedded at compile time. Reading them from disk
+/// relative to the working directory failed in the container, which runs with
+/// no `WORKDIR` in its runtime stage.
 pub async fn run_migrations(pool: &PgPool) -> Result<()> {
-    let migrator = Migrator::new(std::path::Path::new("./migrations")).await?;
-    migrator.run(pool).await?;
+    sqlx::migrate!("./migrations").run(pool).await?;
     Ok(())
 }

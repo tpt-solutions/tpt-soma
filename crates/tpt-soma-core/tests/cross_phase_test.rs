@@ -10,9 +10,7 @@ use uuid::Uuid;
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
 async fn test_cross_phase_subject_summary() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 {
-    let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://postgres:postgres@localhost:5432/tpt_soma_test".to_string()
-    });
+    let database_url = tpt_soma_core::test_helpers::test_database_url();
     let pool = create_pool(&database_url).await?;
     run_migrations(&pool).await?;
 
