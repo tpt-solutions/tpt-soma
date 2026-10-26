@@ -18,9 +18,7 @@ use uuid::Uuid;
 async fn test_e2e_vcf_h5ad_ingest_join_query()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Setup database
-    let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://postgres:postgres@localhost:5432/tpt_soma_test".to_string()
-    });
+    let database_url = tpt_soma_core::test_helpers::test_database_url();
 
     let pool = create_pool(&database_url).await?;
     run_migrations(&pool).await?;
@@ -183,9 +181,7 @@ async fn test_e2e_vcf_h5ad_ingest_join_query()
 #[tokio::test]
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
 async fn test_variant_expression_join() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://postgres:postgres@localhost:5432/tpt_soma_test".to_string()
-    });
+    let database_url = tpt_soma_core::test_helpers::test_database_url();
 
     let pool = create_pool(&database_url).await?;
     run_migrations(&pool).await?;
@@ -256,9 +252,7 @@ async fn test_variant_expression_join() -> Result<(), Box<dyn std::error::Error 
 #[tokio::test]
 #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
 async fn test_graph_queries() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://postgres:postgres@localhost:5432/tpt_soma_test".to_string()
-    });
+    let database_url = tpt_soma_core::test_helpers::test_database_url();
 
     let pool = create_pool(&database_url).await?;
     run_migrations(&pool).await?;

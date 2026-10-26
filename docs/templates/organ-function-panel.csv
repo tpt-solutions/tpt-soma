@@ -1,0 +1,6 @@
+patient_id,test_date,test_name,value,unit,reference_range_low,reference_range_high
+SUBJ-0001,2026-03-14T09:30:00Z,creatinine,0.92,mg/dL,0.6,1.2
+SUBJ-0001,2026-03-14T09:30:00Z,egfr,96,mL/min/1.73m2,60,
+SUBJ-0001,2026-03-14T09:30:00Z,alt,24,U/L,7,56
+SUBJ-0001,2026-03-14T09:30:00Z,ast,27,U/L,10,40
+SUBJ-0001,2026-03-14T09:30:00Z,hba1c,5.4,%,4.0,5.6

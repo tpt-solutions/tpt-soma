@@ -81,3 +81,16 @@ patient-1,2024-01-15T10:00:00Z,egfr,95.0,mL/min/1.73m2,90,200\n";
     assert_eq!(observation.loinc_code, loinc::CREATININE);
     assert_eq!(observation.value, 1.0);
 }
+
+/// The downloadable template must stay accepted by the real upload path.
+#[test]
+fn test_organ_function_csv_template_parses() {
+    use tpt_soma_organon::ingestion::{csv_to_clinical_observation, parse_organ_function_csv};
+
+    let template = include_str!("../../../docs/templates/organ-function-panel.csv");
+    let records = parse_organ_function_csv(template).expect("template parses");
+    assert_eq!(records.len(), 5);
+    for record in records {
+        csv_to_clinical_observation(record).expect("every template row converts");
+    }
+}
