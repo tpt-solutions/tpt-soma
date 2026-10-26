@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Single-cell RNA-seq (10x/AnnData) Scanpy orchestration and storage."
 readme = "README.md"
-keywords = ['scrna-seq', 'scanpy', 'transcriptomics']
-categories = ['science']
+keywords = ['scrna-seq', 'scanpy', 'single-cell', 'anndata', 'transcriptomics']
+categories = ['science::bioinformatics']
 
 [dependencies]
 tokio = { workspace = true }

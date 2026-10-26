@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Time-series/CGM engine: resampling, glycemic variability, longitudinal trajectories."
 readme = "README.md"
-keywords = ['cgm', 'time-series', 'chronos', 'physiology']
-categories = ['science']
+keywords = ['cgm', 'time-series', 'glycemic', 'trajectory', 'physiology']
+categories = ['science::computational-biology', 'mathematics']
 
 [dependencies]
 tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }

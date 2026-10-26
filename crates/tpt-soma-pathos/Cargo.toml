@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Computational pathology: metabolic/endocrine, oncology, longevity, and cardiovascular models."
 readme = "README.md"
-keywords = ['pathology', 'metabolic', 'oncology', 'endocrinology']
-categories = ['science']
+keywords = ['pathology', 'metabolic', 'oncology', 'endocrinology', 'cardiovascular']
+categories = ['science::computational-biology']
 
 [dependencies]
 tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }

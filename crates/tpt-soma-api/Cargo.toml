@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "HTTP + Arrow Flight API server with capability/audit/differential-privacy enforcement."
 readme = "README.md"
-keywords = ['api', 'flight', 'grpc', 'web', 'physiology']
-categories = ['web-programming', 'science']
+keywords = ['api', 'flight', 'grpc', 'http-server', 'physiology']
+categories = ['web-programming::http-server', 'network-programming']
 
 [dependencies]
 tokio = { workspace = true }

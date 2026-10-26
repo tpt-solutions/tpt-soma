@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Genomic variant annotation and harmonization."
 readme = "README.md"
-keywords = ['genomics', 'variants', 'vcf']
-categories = ['science']
+keywords = ['genomics', 'variants', 'vcf', 'annotation', 'harmonization']
+categories = ['science::bioinformatics::genomics']
 
 [dependencies]
 tokio = { workspace = true }

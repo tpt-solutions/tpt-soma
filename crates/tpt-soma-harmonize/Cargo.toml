@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Deterministic ontology mapping (dbSNP rsID, HGNC, LOINC, SNOMED) with human-in-the-loop review."
 readme = "README.md"
-keywords = ['harmonization', 'ontology', 'mapping']
-categories = ['science']
+keywords = ['ontology', 'mapping', 'harmonization', 'loinc', 'snomed']
+categories = ['science::bioinformatics', 'text-processing']
 
 [dependencies]
 tokio = { workspace = true }

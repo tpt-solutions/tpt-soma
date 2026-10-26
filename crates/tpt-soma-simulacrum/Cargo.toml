@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "ODE/PDE solver, PK/PD models, digital-twin calibration, and OSG cross-talk solver."
 readme = "README.md"
-keywords = ['simulation', 'ode', 'pde', 'digital-twin', 'physiology']
-categories = ['science', 'simulation']
+keywords = ['simulation', 'ode', 'pde', 'digital-twin', 'pharmacokinetics']
+categories = ['science::computational-biology::systems-biology', 'simulation']
 
 [dependencies]
 tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }

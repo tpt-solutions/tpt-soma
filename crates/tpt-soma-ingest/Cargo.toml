@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Ingestion parsers for VCF and AnnData/h5ad with checksum-on-write and quarantine."
 readme = "README.md"
-keywords = ['omics', 'vcf', 'scanpy', 'ingestion']
-categories = ['science', 'parser-implementations']
+keywords = ['omics', 'vcf', 'h5ad', 'scanpy', 'ingestion']
+categories = ['science::bioinformatics::genomics', 'parser-implementations']
 
 [dependencies]
 tokio = { workspace = true }

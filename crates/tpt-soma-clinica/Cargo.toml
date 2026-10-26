@@ -7,8 +7,8 @@ license.workspace = true
 authors.workspace = true
 description = "Clinical trial design, cohort discovery, and biomarker discovery/validation statistics."
 readme = "README.md"
-keywords = ['clinical', 'trial', 'biomarker', 'epidemiology']
-categories = ['science']
+keywords = ['clinical-trials', 'biomarker', 'cohort', 'epidemiology', 'statistics']
+categories = ['science::computational-biology', 'mathematics']
 repository.workspace = true
 homepage.workspace = true
 

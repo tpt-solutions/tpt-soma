@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Append-only, hash-chained compliance audit ledger."
 readme = "README.md"
-keywords = ['audit', 'compliance', 'hipaa', 'gdpr', 'ledger']
-categories = ['cryptography', 'science']
+keywords = ['audit', 'compliance', 'hipaa', 'gdpr', 'hash-chain']
+categories = ['cryptography', 'database']
 
 [[bin]]
 name = "tpt-soma-audit"

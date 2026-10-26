@@ -7,8 +7,8 @@ license.workspace = true
 authors.workspace = true
 description = "Capability-gated host API surface for researcher-submitted compute (WASM sandbox)."
 readme = "README.md"
-keywords = ['sandbox', 'wasm', 'capability', 'compute']
-categories = ['cryptography']
+keywords = ['sandbox', 'wasm', 'capability', 'compute', 'security']
+categories = ['wasm', 'security']
 repository.workspace = true
 homepage.workspace = true
 

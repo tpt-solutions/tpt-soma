@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Keystone connection pooling, SQL migrations, query helpers, and the differential-privacy foundation."
 readme = "README.md"
-keywords = ['physiology', 'postgres', 'differential-privacy', 'keystone']
-categories = ['science', 'database']
+keywords = ['postgres', 'differential-privacy', 'connection-pool', 'migrations', 'physiology']
+categories = ['database', 'science']
 
 [dependencies]
 tokio = { workspace = true }

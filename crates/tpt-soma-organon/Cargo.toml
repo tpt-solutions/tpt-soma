@@ -9,8 +9,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Organ function, FHIR/CSV ingestion, imaging metadata, and clinical calculators."
 readme = "README.md"
-keywords = ['clinical', 'fhir', 'physiology', 'calculators']
-categories = ['science']
+keywords = ['clinical', 'fhir', 'organ-function', 'calculators', 'physiology']
+categories = ['science::computational-biology', 'parser-implementations']
 
 [dependencies]
 tpt-soma-core = { path = "../tpt-soma-core", version = "0.1.0" }
