@@ -70,6 +70,10 @@ jobs:
           path: frontend/node_modules
           key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
       - run: cd frontend && npm ci
+      - name: API types match the OpenAPI spec
+        run: |
+          cd frontend && npm run gen:api
+          git diff --exit-code -- src/api/schema.ts
       - run: cd frontend && npx tsc -b
       - run: cd frontend && npx eslint .
       - run: cd frontend && npx vitest run
@@ -167,3 +171,48 @@ jobs:
           toolchain: 1.97.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p tpt-soma-sandbox --features wasmtime-backend
+
+  keystone-db:
+    name: Keystone DB (full --ignored suite)
+    # Runs only when the KEYSTONE_GHCR_TOKEN secret is set (the image is private).
+    # Without it every step is skipped and a notice is printed, so the job stays green.
+    runs-on: ubuntu-latest
+    env:
+      KEYSTONE_GHCR_TOKEN: ${{ secrets.KEYSTONE_GHCR_TOKEN }}
+      KEYSTONE_PASSWORD: ci-pass
+    steps:
+      - name: Skip notice
+        if: env.KEYSTONE_GHCR_TOKEN == ''
+        run: echo "::notice::KEYSTONE_GHCR_TOKEN is not set; the Keystone DB suite was skipped."
+      - uses: actions/checkout@v4
+        if: env.KEYSTONE_GHCR_TOKEN != ''
+      - uses: dtolnay/rust-toolchain@stable
+        if: env.KEYSTONE_GHCR_TOKEN != ''
+        with:
+          toolchain: 1.97.0
+      - uses: Swatinem/rust-cache@v2
+        if: env.KEYSTONE_GHCR_TOKEN != ''
+      - name: Start Keystone
+        if: env.KEYSTONE_GHCR_TOKEN != ''
+        run: |
+          echo "$KEYSTONE_GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker run -d --name keystone -p 5432:5432 \
+            -e TPT_AUTH_BOOTSTRAP_USER=admin \
+            -e TPT_AUTH_BOOTSTRAP_PASSWORD=$KEYSTONE_PASSWORD \
+            -e POSTGRES_PASSWORD=$KEYSTONE_PASSWORD \
+            ghcr.io/tpt-keystone-db/tpt-keystone:latest
+          for i in $(seq 1 60); do
+            pg_isready -h localhost -p 5432 -U admin && break
+            sleep 2
+          done
+      - name: Create test database
+        if: env.KEYSTONE_GHCR_TOKEN != ''
+        env:
+          PGPASSWORD: ${{ env.KEYSTONE_PASSWORD }}
+        run: psql -h localhost -U admin -d postgres -c "CREATE DATABASE tpt_soma"
+      - name: Full --ignored suite
+        if: env.KEYSTONE_GHCR_TOKEN != ''
+        env:
+          TEST_DATABASE_URL: postgres://admin:ci-pass@localhost:5432/tpt_soma
+        # One thread: the tests share tables and delete rows between cases.
+        run: cargo test --workspace -- --include-ignored --test-threads=1
