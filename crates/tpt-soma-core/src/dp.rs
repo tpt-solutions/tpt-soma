@@ -48,6 +48,10 @@ impl DifferentialPrivacy {
     }
 
     pub fn spend_budget(&mut self, cohort: &str, amount: f64) -> Result<BudgetSpend, BudgetError> {
+        // Checked before the budget so a negative amount cannot refund epsilon.
+        if !is_valid_spend(amount) {
+            return Err(BudgetError::InvalidSensitivity);
+        }
         let current = self.spent.entry(cohort.to_string()).or_insert(0.0);
         if *current + amount > self.epsilon {
             return Err(BudgetError::Exhausted);
@@ -62,6 +66,19 @@ impl DifferentialPrivacy {
     pub fn remaining_budget(&self, cohort: &str) -> f64 {
         let spent = self.spent.get(cohort).copied().unwrap_or(0.0);
         self.epsilon - spent
+    }
+
+    /// Same check as [`Self::spend_budget`], without spending anything.
+    pub fn can_spend(&self, cohort: &str, amount: f64) -> bool {
+        if !is_valid_spend(amount) {
+            return false;
+        }
+        let spent = self.spent.get(cohort).copied().unwrap_or(0.0);
+        spent + amount <= self.epsilon
+    }
+
+    pub fn epsilon(&self) -> f64 {
+        self.epsilon
     }
 }
 
@@ -108,6 +125,16 @@ impl DifferentialPrivacyService {
         self.engine.remaining_budget(cohort)
     }
 
+    /// Dry run of [`Self::spend_budget`]: reports whether it would succeed
+    /// without spending or auditing anything.
+    pub fn can_spend(&self, cohort: &str, amount: f64) -> bool {
+        self.engine.can_spend(cohort, amount)
+    }
+
+    pub fn epsilon_cap(&self) -> f64 {
+        self.engine.epsilon()
+    }
+
     pub fn cohort_aggregate_export(
         &mut self,
         cohort: &str,
@@ -141,6 +168,14 @@ impl DifferentialPrivacyService {
 pub enum BudgetError {
     #[error("differential privacy budget exhausted")]
     Exhausted,
+    #[error("sensitivity must be a positive, finite number")]
+    InvalidSensitivity,
+}
+
+/// A spend must be a positive, finite epsilon. NaN and infinity pass a plain
+/// `> 0.0` test only by accident, so both are checked explicitly.
+fn is_valid_spend(amount: f64) -> bool {
+    amount.is_finite() && amount > 0.0
 }
 
 #[cfg(test)]

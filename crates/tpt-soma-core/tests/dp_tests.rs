@@ -17,6 +17,35 @@ fn budget_exhaustion_blocks_further_exports() {
 }
 
 #[test]
+fn invalid_sensitivity_is_rejected_and_never_changes_budget() {
+    let mut dp = DifferentialPrivacy::new(1.0);
+    dp.spend_budget("cohort-a", 0.5).unwrap();
+    for bad in [0.0, -0.5, -1e9, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(
+            matches!(
+                dp.spend_budget("cohort-a", bad),
+                Err(BudgetError::InvalidSensitivity)
+            ),
+            "{bad} should be rejected"
+        );
+        assert!(!dp.can_spend("cohort-a", bad), "{bad} should not fit");
+    }
+    // A negative spend would have refunded epsilon. The budget must be unchanged.
+    assert!((dp.remaining_budget("cohort-a") - 0.5).abs() < 1e-9);
+}
+
+#[test]
+fn can_spend_matches_spend_without_spending() {
+    let mut dp = DifferentialPrivacy::new(1.0);
+    dp.spend_budget("cohort-a", 0.6).unwrap();
+    assert!(dp.can_spend("cohort-a", 0.4));
+    assert!(!dp.can_spend("cohort-a", 0.5));
+    // The dry run does not move the budget.
+    assert!((dp.remaining_budget("cohort-a") - 0.4).abs() < 1e-9);
+    assert!(dp.spend_budget("cohort-a", 0.4).is_ok());
+}
+
+#[test]
 fn noisy_count_centered_around_true_value() {
     let dp = DifferentialPrivacy::new(10.0);
     let mut sum = 0.0;
