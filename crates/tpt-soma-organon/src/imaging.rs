@@ -171,3 +171,110 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    fn valid_metadata() -> DicomMetadata {
+        DicomMetadata {
+            study_instance_uid: "1.2.3".to_string(),
+            series_instance_uid: "1.2.3.4".to_string(),
+            sop_instance_uid: "1.2.3.4.5".to_string(),
+            patient_id: "patient-1".to_string(),
+            patient_name: None,
+            study_date: None,
+            study_time: None,
+            modality: ImagingModality::MR,
+            body_part_examined: None,
+            rows: 512,
+            columns: 512,
+            bits_allocated: 16,
+            bits_stored: 12,
+            pixel_spacing: None,
+            slice_thickness: None,
+            manufacturer: None,
+            manufacturer_model: None,
+            institution_name: None,
+            series_description: None,
+            protocol_name: None,
+        }
+    }
+
+    #[test]
+    fn valid_metadata_passes_validation() {
+        validate_dicom_metadata(&valid_metadata()).unwrap();
+    }
+
+    #[test]
+    fn missing_identifiers_are_rejected() {
+        let mut meta = valid_metadata();
+        meta.study_instance_uid.clear();
+        assert!(
+            validate_dicom_metadata(&meta)
+                .unwrap_err()
+                .to_string()
+                .contains("study")
+        );
+
+        let mut meta = valid_metadata();
+        meta.series_instance_uid.clear();
+        assert!(
+            validate_dicom_metadata(&meta)
+                .unwrap_err()
+                .to_string()
+                .contains("series")
+        );
+
+        let mut meta = valid_metadata();
+        meta.patient_id.clear();
+        assert!(
+            validate_dicom_metadata(&meta)
+                .unwrap_err()
+                .to_string()
+                .contains("patient")
+        );
+    }
+
+    #[test]
+    fn zero_image_dimensions_are_rejected() {
+        let mut meta = valid_metadata();
+        meta.rows = 0;
+        assert!(
+            validate_dicom_metadata(&meta)
+                .unwrap_err()
+                .to_string()
+                .contains("dimensions")
+        );
+
+        let mut meta = valid_metadata();
+        meta.columns = 0;
+        assert!(validate_dicom_metadata(&meta).is_err());
+    }
+
+    #[test]
+    fn dicom_parsing_is_reported_as_unimplemented() {
+        let err = parse_dicom_metadata("scan.dcm").unwrap_err();
+        assert!(err.to_string().contains("not yet implemented"));
+    }
+
+    #[test]
+    fn every_known_modality_code_parses_case_insensitively() {
+        let cases = [
+            ("ct", ImagingModality::CT),
+            ("Pt", ImagingModality::PT),
+            ("XA", ImagingModality::XA),
+            ("rf", ImagingModality::RF),
+            ("MG", ImagingModality::MG),
+            ("dx", ImagingModality::DX),
+            ("CR", ImagingModality::CR),
+        ];
+        for (code, expected) in cases {
+            assert_eq!(
+                code.parse::<ImagingModality>().unwrap(),
+                expected,
+                "code {code}"
+            );
+        }
+    }
+}

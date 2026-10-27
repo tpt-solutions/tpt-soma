@@ -132,3 +132,62 @@ pub fn verify_signature(
         .verify(payload, &sig)
         .map_err(|_| SigningError::VerificationFailed)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signature_verifies_for_signed_payload() {
+        let backend = LocalSigningBackend::generate();
+        let signature = backend.sign(b"payload").unwrap();
+        verify_signature(&backend.verifying_key(), b"payload", &signature).unwrap();
+    }
+
+    #[test]
+    fn signature_rejects_tampered_payload() {
+        let backend = LocalSigningBackend::generate();
+        let signature = backend.sign(b"payload").unwrap();
+        let err = verify_signature(&backend.verifying_key(), b"tampered", &signature).unwrap_err();
+        assert!(matches!(err, SigningError::VerificationFailed));
+    }
+
+    #[test]
+    fn malformed_signature_bytes_fail_verification() {
+        let backend = LocalSigningBackend::generate();
+        let err = verify_signature(&backend.verifying_key(), b"payload", &[1, 2, 3]).unwrap_err();
+        assert!(matches!(err, SigningError::VerificationFailed));
+    }
+
+    #[test]
+    fn key_bytes_round_trip_and_sign_deterministically() {
+        let key_bytes = [7u8; 32];
+        let backend = LocalSigningBackend::from_bytes(&key_bytes);
+        assert_eq!(backend.to_bytes(), key_bytes);
+        let again = LocalSigningBackend::new(ed25519_dalek::SigningKey::from_bytes(&key_bytes));
+        assert_eq!(backend.sign(b"m").unwrap(), again.sign(b"m").unwrap());
+    }
+
+    #[test]
+    fn generate_key_replaces_the_signing_key() {
+        let mut backend = LocalSigningBackend::from_bytes(&[7u8; 32]);
+        let before = backend.verifying_key();
+        backend.generate_key().unwrap();
+        assert_ne!(backend.verifying_key(), before);
+    }
+
+    #[test]
+    fn kms_stub_reports_its_key_and_refuses_operations() {
+        let verifying_key = LocalSigningBackend::generate().verifying_key();
+        let mut stub = KmsSigningBackendStub::new("arn:kms:key".to_string(), verifying_key);
+
+        assert_eq!(stub.key_id(), "arn:kms:key");
+        assert_eq!(stub.verifying_key(), verifying_key);
+        assert!(matches!(stub.sign(b"m"), Err(SigningError::KmsError(_))));
+        assert!(matches!(
+            stub.generate_key(),
+            Err(SigningError::KmsError(_))
+        ));
+        assert!(matches!(stub.rotate_key(), Err(SigningError::KmsError(_))));
+    }
+}
