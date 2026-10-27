@@ -359,6 +359,106 @@ tr:hover td {
   cursor: not-allowed;
 }
 
+.systemic-panel {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.systemic-panel h2 {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.systemic-panel h3 {
+  font-size: 15px;
+  margin: 20px 0 8px;
+}
+
+.systemic-panel .hint {
+  color: #999;
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+
+.systemic-table {
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+
+.systemic-table th,
+.systemic-table td {
+  padding: 6px 12px 6px 0;
+  text-align: left;
+  font-size: 14px;
+}
+
+.systemic-table input,
+.systemic-table select,
+.systemic-inputs input,
+.systemic-inputs select {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  min-width: 140px;
+}
+
+.systemic-inputs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.systemic-inputs label {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  gap: 4px;
+}
+
+.systemic-panel button {
+  padding: 8px 16px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.systemic-panel button:hover:not(:disabled) {
+  background: #1565c0;
+}
+
+.systemic-panel button:disabled {
+  background: #90caf9;
+  cursor: not-allowed;
+}
+
+.systemic-actions {
+  margin: 12px 0;
+}
+
+.systemic-result {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  font-size: 14px;
+  margin-top: 16px;
+}
+
+.systemic-result dt {
+  color: #666;
+}
+
+.systemic-result dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .physiology-charts {
   display: flex;
   flex-direction: column;

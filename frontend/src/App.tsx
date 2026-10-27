@@ -1,45 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import './App.css';
 import UmapViewer from './UmapViewer';
 import PhysiologyPanel from './PhysiologyPanel';
 import SimulationPanel from './SimulationPanel';
+import SystemicQueryPanel from './SystemicQueryPanel';
+import type { components } from './api/schema';
+import { createApiClient, unwrap } from './api/client';
 
-interface Sample {
-  sample_id: string;
-  patient_id: string | null;
-  source: string;
-  dataset_provenance: string | null;
-}
-
-interface JoinRow {
-  variant_id: string;
-  chromosome: string;
-  position: number;
-  reference: string;
-  alternate: string;
-  rsid: string | null;
-  cell_id: string;
-  gene_id: string;
-  count: number;
-}
-
-interface Variant {
-  variant_id: string;
-  chromosome: string;
-  position: number;
-  reference: string;
-  alternate: string;
-  rsid: string | null;
-  clinvar_id: string | null;
-  genotype: string | null;
-}
-
-interface UmapPoint {
-  cell_id: string;
-  umap1: number;
-  umap2: number;
-  cluster: string;
-}
+// Response shapes come from docs/api/openapi.json, so the UI cannot drift from the API.
+type Sample = components['schemas']['SampleRecord'];
+type JoinRow = components['schemas']['VariantExpressionJoin'];
+type Variant = components['schemas']['VariantRecord'];
+type UmapPoint = components['schemas']['UmapRecord'];
 
 interface Cohort {
   cohort_id: string;
@@ -49,9 +21,15 @@ interface Cohort {
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
+// Mock until the cohort list has an API endpoint. Used as initial state so no effect is needed.
+const MOCK_COHORTS: Cohort[] = [
+  { cohort_id: 'cohort-1', name: '1000 Genomes Subset', description: 'Public reference data' },
+  { cohort_id: 'cohort-2', name: 'PBMC 3k', description: '10x Genomics public scRNA-seq' },
+];
+
 function App() {
   const [token, setToken] = useState<string>('');
-  const [cohorts, setCohorts] = useState<Cohort[]>([]);
+  const [cohorts] = useState<Cohort[]>(MOCK_COHORTS);
   const [selectedCohort, setSelectedCohort] = useState<string>('');
   const [samples, setSamples] = useState<Sample[]>([]);
   const [selectedSample, setSelectedSample] = useState<string>('');
@@ -63,45 +41,16 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'variants' | 'umap' | 'join'>('variants');
 
-  const authHeaders = () => ({
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  });
+  const api = createApiClient(API_BASE, token);
 
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    const response = await fetch(`${API_BASE}${url}`, {
-      ...options,
-      headers: {
-        ...authHeaders(),
-        ...options.headers,
-      },
-    });
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`${response.status}: ${text}`);
-    }
-    return response.json();
-  };
-
-  const loadCohorts = async () => {
-    try {
-      // In a real app, this would be an API call
-      // For now, we'll use a mock
-      setCohorts([
-        { cohort_id: 'cohort-1', name: '1000 Genomes Subset', description: 'Public reference data' },
-        { cohort_id: 'cohort-2', name: 'PBMC 3k', description: '10x Genomics public scRNA-seq' },
-      ]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load cohorts');
-    }
-  };
-
-  const loadSamples = async () => {
-    if (!selectedCohort) return;
+  const loadSamples = async (cohortId: string) => {
+    if (!cohortId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchWithAuth(`/api/v1/cohorts/${selectedCohort}/samples`);
+      const data = unwrap(
+        await api.GET('/api/v1/cohorts/{cohort_id}/samples', { params: { path: { cohort_id: cohortId } } }),
+      );
       setSamples(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load samples');
@@ -115,7 +64,9 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchWithAuth(`/api/v1/variants/${selectedSample}`);
+      const data = unwrap(
+        await api.GET('/api/v1/variants/{sample_id}', { params: { path: { sample_id: selectedSample } } }),
+      );
       setVariants(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load variants');
@@ -129,7 +80,9 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchWithAuth(`/api/v1/umap/${selectedSample}`);
+      const data = unwrap(
+        await api.GET('/api/v1/umap/{sample_id}', { params: { path: { sample_id: selectedSample } } }),
+      );
       setUmapData(data);
       const uniqueClusters = [...new Set(data.map((d: UmapPoint) => d.cluster))].sort() as string[];
       setClusters(uniqueClusters);
@@ -153,14 +106,6 @@ function App() {
   const filteredUmap = selectedCluster 
     ? umapData.filter(d => d.cluster === selectedCluster)
     : umapData;
-
-  useEffect(() => {
-    loadCohorts();
-  }, []);
-
-  useEffect(() => {
-    loadSamples();
-  }, [selectedCohort]);
 
   return (
     <div className="app">
@@ -189,7 +134,10 @@ function App() {
             <h2>Cohort</h2>
             <select
               value={selectedCohort}
-              onChange={(e) => setSelectedCohort(e.target.value)}
+              onChange={(e) => {
+                setSelectedCohort(e.target.value);
+                loadSamples(e.target.value);
+              }}
               disabled={loading}
             >
               <option value="">Select cohort...</option>
@@ -274,6 +222,7 @@ function App() {
 
       <PhysiologyPanel token={token} />
       <SimulationPanel token={token} />
+      <SystemicQueryPanel token={token} />
     </div>
   );
 }
@@ -328,16 +277,11 @@ function JoinViewer({ sampleId, token }: { sampleId: string; token: string }) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/v1/join/variant-expression`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ sample_id: sampleId, variant_id: variantId, gene_id: geneId }),
-      });
-      if (!response.ok) throw new Error(await response.text());
-      const data = await response.json();
+      const data = unwrap(
+        await createApiClient(API_BASE, token).POST('/api/v1/join/variant-expression', {
+          body: { sample_id: sampleId, variant_id: variantId, gene_id: geneId },
+        }),
+      );
       setJoinData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Join failed');
