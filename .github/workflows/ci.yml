@@ -41,13 +41,13 @@ jobs:
         run: cargo install cargo-llvm-cov --locked
       - name: Coverage summary (workspace floor 65% line coverage)
         run: |
-          cargo llvm-cov --workspace --exclude-explicitly-unused \
+          cargo llvm-cov --workspace \
             --ignore-filename-regex 'tests/|/tests/' \
             --fail-under-lines 65 \
             --summary-only
       - name: Upload lcov report
         run: |
-          cargo llvm-cov --workspace --exclude-explicitly-unused \
+          cargo llvm-cov --workspace \
             --ignore-filename-regex 'tests/|/tests/' \
             --lcov --output-path lcov.info
         continue-on-error: true
@@ -85,7 +85,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
         with:
-          version: v3.16
+          version: v3.16.4
       - run: helm lint deploy/helm/tpt-soma
       - run: |
           # render with a dummy capability key to exercise the secret + mounts
@@ -118,7 +118,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check protobuf compile
         run: |
-          apt-get update && apt-get install -y protobuf-compiler
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler
           protoc --proto_path=schemas/protobuf schemas/protobuf/*.proto --python_out=/tmp/schema_py --rust_out=/tmp/schema_rs
 
   audit-database:

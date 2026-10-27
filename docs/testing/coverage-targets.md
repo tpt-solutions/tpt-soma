@@ -24,7 +24,7 @@ non-test, non-generated code, measured by `cargo-llvm-cov` on Linux CI.
 - Tool: `cargo-llvm-cov` (`cargo install cargo-llvm-cov`).
 - Command:
   ```
-  cargo llvm-cov --workspace --exclude-explicitly-unused \
+  cargo llvm-cov --workspace \
     --ignore-filename-regex 'tests/|/tests/' --summary-only
   ```
 - CI: `.github/workflows/ci.yml` `coverage` job enforces per-crate thresholds

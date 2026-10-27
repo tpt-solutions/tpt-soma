@@ -122,17 +122,20 @@ impl ApiServer {
 
         let app = Router::new()
             // Genomica routes
-            .route("/api/v1/variants/:sample_id", get(get_variants))
-            .route("/api/v1/variants/:sample_id/:variant_id", get(get_variant))
-            // Cytos routes
-            .route("/api/v1/expression/:sample_id", get(get_expression))
+            .route("/api/v1/variants/{sample_id}", get(get_variants))
             .route(
-                "/api/v1/expression/gene/:gene_id",
+                "/api/v1/variants/{sample_id}/{variant_id}",
+                get(get_variant),
+            )
+            // Cytos routes
+            .route("/api/v1/expression/{sample_id}", get(get_expression))
+            .route(
+                "/api/v1/expression/gene/{gene_id}",
                 get(get_expression_by_gene),
             )
-            .route("/api/v1/umap/:sample_id", get(get_umap))
+            .route("/api/v1/umap/{sample_id}", get(get_umap))
             .route(
-                "/api/v1/umap/:sample_id/cluster/:cluster",
+                "/api/v1/umap/{sample_id}/cluster/{cluster}",
                 get(get_umap_by_cluster),
             )
             // Multi-omics join
@@ -142,35 +145,35 @@ impl ApiServer {
             )
             // Cohort routes
             .route(
-                "/api/v1/cohorts/:cohort_id/samples",
+                "/api/v1/cohorts/{cohort_id}/samples",
                 get(get_cohort_samples),
             )
             // DP cohort aggregate export (single enforcement code path)
             .route(
-                "/api/v1/cohorts/:cohort_id/aggregate/count",
+                "/api/v1/cohorts/{cohort_id}/aggregate/count",
                 post(cohort_aggregate_count),
             )
             // DP budget dry run: reports whether an export would fit, spends nothing
-            .route("/api/v1/cohorts/:cohort_id/budget", get(get_cohort_budget))
+            .route("/api/v1/cohorts/{cohort_id}/budget", get(get_cohort_budget))
             // Organon: clinical observation ingestion + trajectories
             .route(
                 "/api/v1/ingest/fhir-observation",
                 post(ingest_fhir_observation),
             )
             .route(
-                "/api/v1/cohorts/:cohort_id/aggregate/cross-domain",
+                "/api/v1/cohorts/{cohort_id}/aggregate/cross-domain",
                 post(cross_domain_aggregate_count),
             )
             .route(
-                "/api/v1/clinical-observations/:subject_id",
+                "/api/v1/clinical-observations/{subject_id}",
                 get(get_clinical_observations),
             )
             .route(
-                "/api/v1/clinical-observations/:subject_id/:loinc_code/trajectory",
+                "/api/v1/clinical-observations/{subject_id}/{loinc_code}/trajectory",
                 get(get_organ_trajectory),
             )
             // Organon: imaging ingestion + listing
-            .route("/api/v1/organ-imaging/:subject_id", get(get_organ_imaging))
+            .route("/api/v1/organ-imaging/{subject_id}", get(get_organ_imaging))
             // Organon: cross-organ coupling graph
             .route("/api/v1/organ-system-graph", get(get_organ_system_graph))
             .route(
@@ -178,14 +181,14 @@ impl ApiServer {
                 post(simulate_organ_cascade),
             )
             // Chronos: CGM ingestion + variability
-            .route("/api/v1/cgm/:subject_id", get(get_cgm_readings))
+            .route("/api/v1/cgm/{subject_id}", get(get_cgm_readings))
             .route(
-                "/api/v1/cgm/:subject_id/variability",
+                "/api/v1/cgm/{subject_id}/variability",
                 get(get_cgm_variability),
             )
             // Cross-phase: Phase 1 samples + Phase 2 clinical/CGM records for one subject
             .route(
-                "/api/v1/subjects/:patient_id/cross-phase-summary",
+                "/api/v1/subjects/{patient_id}/cross-phase-summary",
                 get(get_cross_phase_summary),
             )
             // Phase 3: simulation run + query + DP aggregate export
@@ -194,22 +197,22 @@ impl ApiServer {
             .route("/api/v1/systemic/query", post(run_systemic_query))
             // Phase 4: clinical trial protocols, screening and adverse events
             .route("/api/v1/trials", post(create_trial))
-            .route("/api/v1/trials/:trial_id/screen", post(screen_trial))
+            .route("/api/v1/trials/{trial_id}/screen", post(screen_trial))
             .route(
-                "/api/v1/trials/:trial_id/adverse-events",
+                "/api/v1/trials/{trial_id}/adverse-events",
                 post(record_trial_adverse_events),
             )
             .route(
-                "/api/v1/trials/:trial_id/adverse-events/summary",
+                "/api/v1/trials/{trial_id}/adverse-events/summary",
                 get(get_trial_ae_summary),
             )
             .route(
-                "/api/v1/trials/:trial_id/subjects/:subject_id/schedule",
+                "/api/v1/trials/{trial_id}/subjects/{subject_id}/schedule",
                 get(get_subject_schedule),
             )
-            .route("/api/v1/simulations/:run_id", get(get_simulation))
+            .route("/api/v1/simulations/{run_id}", get(get_simulation))
             .route(
-                "/api/v1/simulations/:run_id/aggregate/count",
+                "/api/v1/simulations/{run_id}/aggregate/count",
                 post(simulation_aggregate_count),
             )
             .layer(middleware::from_fn_with_state(
@@ -1467,7 +1470,7 @@ mod tests {
 /// purpose: its policy is covered in `auth.rs`, and these tests target the
 /// handlers' own wiring of request, storage and response.
 #[cfg(test)]
-mod trial_db_tests {
+mod trial_handler_tests {
     use super::*;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
@@ -1488,17 +1491,17 @@ mod trial_db_tests {
         });
         Ok(Router::new()
             .route("/api/v1/trials", post(create_trial))
-            .route("/api/v1/trials/:trial_id/screen", post(screen_trial))
+            .route("/api/v1/trials/{trial_id}/screen", post(screen_trial))
             .route(
-                "/api/v1/trials/:trial_id/adverse-events",
+                "/api/v1/trials/{trial_id}/adverse-events",
                 post(record_trial_adverse_events),
             )
             .route(
-                "/api/v1/trials/:trial_id/adverse-events/summary",
+                "/api/v1/trials/{trial_id}/adverse-events/summary",
                 get(get_trial_ae_summary),
             )
             .route(
-                "/api/v1/trials/:trial_id/subjects/:subject_id/schedule",
+                "/api/v1/trials/{trial_id}/subjects/{subject_id}/schedule",
                 get(get_subject_schedule),
             )
             .with_state(state))
