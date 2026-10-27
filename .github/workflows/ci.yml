@@ -25,6 +25,10 @@ jobs:
         run: cargo build --workspace
       - name: Test
         run: cargo test --workspace
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
       - name: Deny check
         run: cargo deny check
 
@@ -42,13 +46,13 @@ jobs:
       - name: Coverage summary (workspace floor 65% line coverage)
         run: |
           cargo llvm-cov --workspace \
-            --ignore-filename-regex 'tests/|/tests/' \
+            --ignore-filename-regex 'tests/|/tests/|/bin/|test_helpers\.rs' \
             --fail-under-lines 65 \
             --summary-only
       - name: Upload lcov report
         run: |
           cargo llvm-cov --workspace \
-            --ignore-filename-regex 'tests/|/tests/' \
+            --ignore-filename-regex 'tests/|/tests/|/bin/|test_helpers\.rs' \
             --lcov --output-path lcov.info
         continue-on-error: true
       - uses: actions/upload-artifact@v4
@@ -119,7 +123,9 @@ jobs:
       - name: Check protobuf compile
         run: |
           sudo apt-get update && sudo apt-get install -y protobuf-compiler
-          protoc --proto_path=schemas/protobuf schemas/protobuf/*.proto --python_out=/tmp/schema_py --rust_out=/tmp/schema_rs
+          # Python output only: protoc has no built-in Rust generator, and the
+          # Rust crates use hand-written protobuf code (tpt-soma-flight::pb).
+          protoc --proto_path=schemas/protobuf schemas/protobuf/*.proto --python_out=/tmp/schema_py
 
   audit-database:
     name: Audit ledger (PostgreSQL)
