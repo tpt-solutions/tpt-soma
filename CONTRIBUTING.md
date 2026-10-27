@@ -1,6 +1,12 @@
 # Contributing
 
-## Before you open a pull request
+Contributions are handled through issues only. Please open an issue to report a
+bug, request a feature or propose a change. Do not open pull requests; they will
+be closed without review.
+
+The sections below are for maintainers working on the codebase.
+
+## Checks
 
 Run the same checks CI runs:
 
@@ -38,7 +44,7 @@ cargo test -p tpt-soma-audit -- --include-ignored --test-threads=1
 - The full suite needs the Keystone image, because the migrations use its
   `plexus`, `chronos` and `canopy` extensions.
 
-## Rules that code review checks
+## Rules that maintainer review checks
 
 - **Every route needs a `POLICY` entry** in `crates/tpt-soma-api/src/auth.rs`.
   Unlisted routes are denied, and the `every_registered_route_has_a_policy_entry`

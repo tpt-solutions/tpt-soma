@@ -46,7 +46,7 @@ These are the same checks CI runs in [.github/workflows/ci.yml](.github/workflow
 
 ## Running the stack
 
-The Docker Compose deployment starts Keystone, MinIO, the API and the frontend:
+The Docker Compose deployment starts Keystone, MinIO, the API, the Arrow Flight service and the frontend:
 
 ```sh
 cp deploy/.env.example deploy/.env   # set the bootstrap credentials
@@ -60,8 +60,20 @@ A Helm chart skeleton for Kubernetes is in [deploy/helm/tpt-soma](deploy/helm/tp
 ```sh
 cd frontend
 npm install
-npm run dev
+npm run dev        # Vite dev server
+npm run build      # type-check and production build
+npm run lint
+npm test           # Vitest
+npm run gen:api    # regenerate src/api/schema.ts from docs/api/openapi.json
 ```
+
+The API types in `src/api/schema.ts` are generated from the OpenAPI spec, so regenerate them rather than editing by hand when the API changes.
+
+## Contributing
+
+Contributions are handled through issues. Open an issue to report a bug, request a feature or propose a change. Pull requests are closed without review. See [CONTRIBUTING.md](CONTRIBUTING.md) for the checks and review rules that apply to maintainers.
+
+To report a security problem, follow [SECURITY.md](SECURITY.md). Do not open a public issue for it.
 
 ## Documentation
 
@@ -70,7 +82,9 @@ npm run dev
 - [docs/adr/](docs/adr/): architecture decision records
 - [docs/runbooks/](docs/runbooks/): onboarding and operational runbooks
 - [docs/security/](docs/security/) and [docs/testing/](docs/testing/): security and test notes
+- [docs/api/](docs/api/): API reference and OpenAPI spec
 - [docs/irb/](docs/irb/): IRB material
+- [schemas/](schemas/README.md): Arrow and protobuf schemas
 
 ## Security and data handling
 
