@@ -181,6 +181,17 @@ const POLICY: &[(&str, &str, &[&str], &str)] = &[
         "export",
     ),
     (
+        "GET",
+        "/api/v1/cohorts/*/budget",
+        &[
+            "genomic_variant",
+            "transcriptomic_scrna",
+            "clinical_observation",
+            "cgm_continuous",
+        ],
+        "read",
+    ),
+    (
         "POST",
         "/api/v1/cohorts/*/aggregate/cross-domain",
         &[
@@ -302,6 +313,12 @@ const POLICY: &[(&str, &str, &[&str], &str)] = &[
         &["clinical_trial"],
         "read",
     ),
+    (
+        "GET",
+        "/api/v1/trials/*/subjects/*/schedule",
+        &["clinical_trial"],
+        "read",
+    ),
 ];
 
 fn path_matches(path: &str, pattern: &str) -> bool {
@@ -354,6 +371,78 @@ fn extract_cohort_id(path: &str) -> Option<String> {
     }
 }
 
+/// One check made by the route policy, with its outcome and the values it compared.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyCheck {
+    pub name: &'static str,
+    pub passed: bool,
+    pub detail: String,
+}
+
+/// Evaluate every route-policy check for a token and report each one. The
+/// enforcing path (`enforce_route_policy`) is built on this, so an explanation
+/// cannot drift from what the server actually does.
+///
+/// This covers policy only. It does not check signature, expiry or revocation.
+pub fn explain_route_policy(token: &CapabilityToken, method: &str, path: &str) -> Vec<PolicyCheck> {
+    // Default deny: a route without a POLICY entry is refused for every token.
+    // Adding a route means adding its policy entry; the route-coverage test in
+    // `server.rs` fails until that is done.
+    let Some(required) = required_capability_for(method, path) else {
+        return vec![PolicyCheck {
+            name: "policy entry",
+            passed: false,
+            detail: format!("no POLICY entry for {method} {path} (default deny)"),
+        }];
+    };
+
+    let mut checks = vec![
+        PolicyCheck {
+            name: "resource class",
+            passed: required
+                .allowed_classes
+                .contains(&token.resource_class.as_str()),
+            detail: format!(
+                "token '{}' against allowed {:?}",
+                token.resource_class, required.allowed_classes
+            ),
+        },
+        PolicyCheck {
+            name: "action",
+            passed: action_allows(&token.action, required.action),
+            detail: format!(
+                "token '{}' against required '{}'",
+                token.action, required.action
+            ),
+        },
+    ];
+
+    // Creating a trial mints a new cohort id, so only an unscoped (`*`) token may do it.
+    if path == "/api/v1/trials" {
+        checks.push(PolicyCheck {
+            name: "trial creation",
+            passed: token.cohort_scope.iter().any(|c| c == "*"),
+            detail: format!("requires '*' scope; token has {:?}", token.cohort_scope),
+        });
+    }
+
+    if let Some(cohort_id) = extract_cohort_id(path) {
+        checks.push(PolicyCheck {
+            name: "cohort scope",
+            passed: token
+                .cohort_scope
+                .iter()
+                .any(|c| c == "*" || c == &cohort_id),
+            detail: format!(
+                "cohort '{}' against scope {:?}",
+                cohort_id, token.cohort_scope
+            ),
+        });
+    }
+
+    checks
+}
+
 /// Enforce the token's resource class, action, and cohort scope against the
 /// route-level policy. Returns Ok(()) when the token satisfies the policy.
 pub fn enforce_route_policy(
@@ -361,40 +450,14 @@ pub fn enforce_route_policy(
     method: &str,
     path: &str,
 ) -> Result<(), AuthError> {
-    // Default deny: a route without a POLICY entry is refused for every token.
-    // Adding a route means adding its policy entry; the route-coverage test in
-    // `server.rs` fails until that is done.
-    let Some(required) = required_capability_for(method, path) else {
-        return Err(AuthError::InsufficientScope);
-    };
-
-    if !required
-        .allowed_classes
-        .contains(&token.resource_class.as_str())
+    if explain_route_policy(token, method, path)
+        .iter()
+        .all(|check| check.passed)
     {
-        return Err(AuthError::InsufficientScope);
+        Ok(())
+    } else {
+        Err(AuthError::InsufficientScope)
     }
-
-    if !action_allows(&token.action, required.action) {
-        return Err(AuthError::InsufficientScope);
-    }
-
-    // Creating a trial mints a new cohort id, so only an unscoped (`*`) token may do it.
-    if path == "/api/v1/trials" && !token.cohort_scope.iter().any(|c| c == "*") {
-        return Err(AuthError::InsufficientScope);
-    }
-
-    if let Some(cohort_id) = extract_cohort_id(path) {
-        let in_scope = token
-            .cohort_scope
-            .iter()
-            .any(|c| c == "*" || c == &cohort_id);
-        if !in_scope {
-            return Err(AuthError::InsufficientScope);
-        }
-    }
-
-    Ok(())
 }
 
 /// Enforce a token's optional graph-traversal scope against a concrete OSG
@@ -566,6 +629,29 @@ mod tests {
     }
 
     #[test]
+    fn test_explain_reports_each_failing_check() {
+        // Right class and action, wrong cohort: only the cohort check fails.
+        let t = token("genomic_variant", "cohort-b", "read");
+        let checks = explain_route_policy(&t, "GET", "/api/v1/cohorts/cohort-a/samples");
+        let failed: Vec<_> = checks
+            .iter()
+            .filter(|c| !c.passed)
+            .map(|c| c.name)
+            .collect();
+        assert_eq!(failed, vec!["cohort scope"]);
+        assert!(enforce_route_policy(&t, "GET", "/api/v1/cohorts/cohort-a/samples").is_err());
+    }
+
+    #[test]
+    fn test_explain_reports_default_deny_for_unlisted_route() {
+        let t = token("genomic_variant", "*", "admin");
+        let checks = explain_route_policy(&t, "DELETE", "/api/v1/nowhere");
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].name, "policy entry");
+        assert!(!checks[0].passed);
+    }
+
+    #[test]
     fn test_route_policy_allows_correct_class_action_cohort() {
         let t = token("genomic_variant", "cohort-a", "read");
         enforce_route_policy(&t, "GET", "/api/v1/variants/sample-1").unwrap();
@@ -658,6 +744,28 @@ mod tests {
         enforce_route_policy(&write, "POST", "/api/v1/trials/trial-1/screen").unwrap();
         assert!(matches!(
             enforce_route_policy(&write, "POST", "/api/v1/trials/trial-2/screen").unwrap_err(),
+            AuthError::InsufficientScope
+        ));
+    }
+
+    #[test]
+    fn test_route_policy_subject_schedule_is_read_and_trial_scoped() {
+        let path = "/api/v1/trials/trial-1/subjects/subject-7/schedule";
+        let read = token("clinical_trial", "trial-1", "read");
+        enforce_route_policy(&read, "GET", path).unwrap();
+
+        // Read-only: a write action is not enough to see a schedule and a read is not enough to write one.
+        let write = token("clinical_trial", "trial-1", "write");
+        enforce_route_policy(&write, "GET", path).unwrap();
+        assert!(matches!(
+            enforce_route_policy(&read, "POST", path).unwrap_err(),
+            AuthError::InsufficientScope
+        ));
+
+        // A token scoped to another trial cannot read this trial's schedule.
+        let other = token("clinical_trial", "trial-2", "read");
+        assert!(matches!(
+            enforce_route_policy(&other, "GET", path).unwrap_err(),
             AuthError::InsufficientScope
         ));
     }

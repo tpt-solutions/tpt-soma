@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::PathBuf;
+use tpt_soma_api::auth::explain_route_policy;
 use tpt_soma_capability::{
     registry::DataClassRegistry,
     revocation::RevocationList,
@@ -55,6 +56,19 @@ enum Commands {
         /// Nonce of the token to revoke (hex encoded)
         #[arg(short, long)]
         nonce: String,
+    },
+    /// Explain which route-policy checks a token passes or fails for a request.
+    /// Checks policy only: signature, expiry and revocation are not checked.
+    Explain {
+        /// Path to a token JSON file, as written by `issue`
+        #[arg(short, long)]
+        token: PathBuf,
+        /// HTTP method (e.g., GET, POST)
+        #[arg(short, long)]
+        method: String,
+        /// Request path (e.g., /api/v1/cohorts/cohort-a/samples)
+        #[arg(short, long)]
+        path: String,
     },
 }
 
@@ -150,6 +164,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 revocation_list.revoke(nonce_bytes).await;
                 println!("Token revoked");
             });
+        }
+        Commands::Explain {
+            token,
+            method,
+            path,
+        } => {
+            let token: CapabilityToken = serde_json::from_slice(&fs::read(token)?)?;
+            let checks = explain_route_policy(&token, &method, &path);
+
+            println!("{method} {path}");
+            for check in &checks {
+                let mark = if check.passed { "PASS" } else { "FAIL" };
+                println!("  [{mark}] {}: {}", check.name, check.detail);
+            }
+            let allowed = checks.iter().all(|check| check.passed);
+            println!("Result: {}", if allowed { "ALLOW" } else { "DENY" });
         }
     }
 
