@@ -1,0 +1,1954 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "tpt-soma API",
+    "version": "0.1.0",
+    "description": "Hand-maintained description of the tpt-soma HTTP API. A test in crates/tpt-soma-api/src/server.rs checks every method and path against the router, so a route cannot be added or removed without updating this file. Request and response schemas are loose (`object`) except where noted; tighten them as the handler types are made public."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Probes"
+        ],
+        "operationId": "health",
+        "summary": "Liveness probe",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Probes"
+        ],
+        "operationId": "metrics",
+        "summary": "Prometheus metrics",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/vcf": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "operationId": "ingestVcf",
+        "summary": "Upload a VCF file (genomic_raw)",
+        "responses": {
+          "200": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "VCF file, up to 256 MB",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ingest/h5ad": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "operationId": "ingestH5ad",
+        "summary": "Upload an AnnData .h5ad file (transcriptomic_scrna)",
+        "responses": {
+          "200": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "h5ad file, up to 256 MB",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ingest/organ-csv": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "operationId": "ingestOrganCsv",
+        "summary": "Upload an organ-function panel CSV. One bad row rejects the file.",
+        "responses": {
+          "200": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "CSV matching docs/templates/organ-function-panel.csv",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ingest/imaging": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "operationId": "ingestImaging",
+        "summary": "Upload organ imaging data",
+        "responses": {
+          "200": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "Imaging file",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ingest/cgm": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "operationId": "ingestCgm",
+        "summary": "Upload continuous glucose monitor readings",
+        "responses": {
+          "200": {
+            "description": "Stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "description": "Device or vendor source label",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "CGM export",
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ingest/fhir-observation": {
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "operationId": "ingestFhirObservation",
+        "summary": "Ingest one FHIR Observation resource (JSON)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "FHIR Observation",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/variants/{sample_id}": {
+      "get": {
+        "tags": [
+          "Genomica"
+        ],
+        "operationId": "listVariants",
+        "summary": "Variants for a sample",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VariantRecord"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/variants/{sample_id}/{variant_id}": {
+      "get": {
+        "tags": [
+          "Genomica"
+        ],
+        "operationId": "getVariant",
+        "summary": "One variant for a sample",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/VariantRecord"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "variant_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/expression/{sample_id}": {
+      "get": {
+        "tags": [
+          "Cytos"
+        ],
+        "operationId": "getExpression",
+        "summary": "Expression matrix rows for a sample",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/expression/gene/{gene_id}": {
+      "get": {
+        "tags": [
+          "Cytos"
+        ],
+        "operationId": "getExpressionByGene",
+        "summary": "Expression of one gene across samples",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "gene_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/umap/{sample_id}": {
+      "get": {
+        "tags": [
+          "Cytos"
+        ],
+        "operationId": "getUmap",
+        "summary": "UMAP coordinates for a sample",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UmapRecord"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/umap/{sample_id}/cluster/{cluster}": {
+      "get": {
+        "tags": [
+          "Cytos"
+        ],
+        "operationId": "getUmapByCluster",
+        "summary": "UMAP coordinates for one cluster",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UmapRecord"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cluster",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/join/variant-expression": {
+      "post": {
+        "tags": [
+          "Genomica"
+        ],
+        "operationId": "joinVariantExpression",
+        "summary": "Multi-omics join: variant x expression for a sample",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VariantExpressionJoin"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "sample_id",
+                  "variant_id",
+                  "gene_id"
+                ],
+                "properties": {
+                  "sample_id": {
+                    "type": "string"
+                  },
+                  "variant_id": {
+                    "type": "string"
+                  },
+                  "gene_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cohorts/{cohort_id}/samples": {
+      "get": {
+        "tags": [
+          "Cohorts"
+        ],
+        "operationId": "listCohortSamples",
+        "summary": "Samples in a cohort",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SampleRecord"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "cohort_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cohorts/{cohort_id}/budget": {
+      "get": {
+        "tags": [
+          "Differential privacy"
+        ],
+        "operationId": "getCohortBudget",
+        "summary": "Dry run: whether a DP export would fit the cohort's budget. Spends nothing and writes no audit row.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cohort_id": {
+                      "type": "string"
+                    },
+                    "epsilon_cap": {
+                      "type": "number"
+                    },
+                    "remaining_budget": {
+                      "type": "number"
+                    },
+                    "requested_sensitivity": {
+                      "type": "number"
+                    },
+                    "would_succeed": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "cohort_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sensitivity",
+            "in": "query",
+            "required": false,
+            "description": "Epsilon the export would spend (positive, finite, default 1.0)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cohorts/{cohort_id}/aggregate/count": {
+      "post": {
+        "tags": [
+          "Differential privacy"
+        ],
+        "operationId": "cohortAggregateCount",
+        "summary": "Release a noisy cohort count. Spends epsilon and records the spend in the audit ledger before returning. Requires export action.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cohort_id": {
+                      "type": "string"
+                    },
+                    "noisy_count": {
+                      "type": "number"
+                    },
+                    "epsilon_spent": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "cohort_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "cohort_id"
+                ],
+                "properties": {
+                  "cohort_id": {
+                    "type": "string"
+                  },
+                  "sensitivity": {
+                    "type": "number",
+                    "description": "Epsilon to spend (positive, finite, default 1.0). Zero, negative, NaN and infinite values are rejected with 400."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cohorts/{cohort_id}/aggregate/cross-domain": {
+      "post": {
+        "tags": [
+          "Differential privacy"
+        ],
+        "operationId": "cohortCrossDomainAggregate",
+        "summary": "Release one noisy count combined across data classes. Spends the cohort budget once. Requires export action.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "cohort_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Cross-domain aggregate request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/clinical-observations/{subject_id}": {
+      "get": {
+        "tags": [
+          "Organon"
+        ],
+        "operationId": "listClinicalObservations",
+        "summary": "Clinical observations for a subject",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/clinical-observations/{subject_id}/{loinc_code}/trajectory": {
+      "get": {
+        "tags": [
+          "Organon"
+        ],
+        "operationId": "getOrganTrajectory",
+        "summary": "Trajectory for one LOINC code",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "loinc_code",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/organ-imaging/{subject_id}": {
+      "get": {
+        "tags": [
+          "Organon"
+        ],
+        "operationId": "getOrganImaging",
+        "summary": "Imaging records for a subject",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/organ-system-graph": {
+      "get": {
+        "tags": [
+          "Organon"
+        ],
+        "operationId": "getOrganSystemGraph",
+        "summary": "Cross-organ coupling graph",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/organ-system-graph/cascade": {
+      "post": {
+        "tags": [
+          "Organon"
+        ],
+        "operationId": "simulateOrganCascade",
+        "summary": "Simulate a cascade over the organ graph",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "Cascade request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cgm/{subject_id}": {
+      "get": {
+        "tags": [
+          "Chronos"
+        ],
+        "operationId": "getCgmReadings",
+        "summary": "CGM readings for a subject",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cgm/{subject_id}/variability": {
+      "get": {
+        "tags": [
+          "Chronos"
+        ],
+        "operationId": "getCgmVariability",
+        "summary": "Glycemic variability over a time range",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "description": "Range start (RFC 3339)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "description": "Range end (RFC 3339)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/subjects/{patient_id}/cross-phase-summary": {
+      "get": {
+        "tags": [
+          "Cross-phase"
+        ],
+        "operationId": "getCrossPhaseSummary",
+        "summary": "Phase 1 samples plus Phase 2 clinical and CGM records for one subject",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/simulate": {
+      "post": {
+        "tags": [
+          "Simulacrum"
+        ],
+        "operationId": "runSimulation",
+        "summary": "Run a physiology simulation",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "Simulation request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/simulations/{run_id}": {
+      "get": {
+        "tags": [
+          "Simulacrum"
+        ],
+        "operationId": "getSimulation",
+        "summary": "Read a stored simulation run",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/simulations/{run_id}/aggregate/count": {
+      "post": {
+        "tags": [
+          "Differential privacy"
+        ],
+        "operationId": "simulationAggregateCount",
+        "summary": "Release a noisy count over a simulation run. Spends epsilon. Requires export action.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Aggregate request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/systemic/query": {
+      "post": {
+        "tags": [
+          "Simulacrum"
+        ],
+        "operationId": "runSystemicQuery",
+        "summary": "Systemic query over an OSG topology (computed, not persisted)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "Systemic query",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/trials": {
+      "post": {
+        "tags": [
+          "Clinica"
+        ],
+        "operationId": "createTrial",
+        "summary": "Create a clinical trial protocol with eligibility criteria, arms and visits. Requires an unscoped (*) token.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "trial_name",
+                  "cohort_label",
+                  "criteria",
+                  "arms",
+                  "visits"
+                ],
+                "properties": {
+                  "trial_name": {
+                    "type": "string"
+                  },
+                  "cohort_label": {
+                    "type": "string"
+                  },
+                  "criteria": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "key",
+                        "min",
+                        "max"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "inclusion",
+                            "exclusion"
+                          ]
+                        },
+                        "key": {
+                          "type": "string"
+                        },
+                        "min": {
+                          "type": "number"
+                        },
+                        "max": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  },
+                  "arms": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "name"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "allocation_ratio": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "default": 1,
+                          "description": "Share of enrollments relative to the other arms. Allocation is not randomization."
+                        }
+                      }
+                    }
+                  },
+                  "visits": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "day"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "day": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Days after enrollment. Strictly increasing across visits."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/trials/{trial_id}/screen": {
+      "post": {
+        "tags": [
+          "Clinica"
+        ],
+        "operationId": "screenTrial",
+        "summary": "Screen subjects against trial eligibility. target is the total number of enrolled subjects for the trial, counting those already enrolled. Already-enrolled subjects are not de-enrolled or re-armed.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Subjects to screen",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/trials/{trial_id}/adverse-events": {
+      "post": {
+        "tags": [
+          "Clinica"
+        ],
+        "operationId": "recordTrialAdverseEvents",
+        "summary": "Record adverse events for a trial",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Adverse events",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/trials/{trial_id}/adverse-events/summary": {
+      "get": {
+        "tags": [
+          "Clinica"
+        ],
+        "operationId": "getTrialAdverseEventSummary",
+        "summary": "Adverse-event summary for a trial",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/trials/{trial_id}/subjects/{subject_id}/schedule": {
+      "get": {
+        "tags": [
+          "Clinica"
+        ],
+        "operationId": "getSubjectSchedule",
+        "summary": "Visit dates for one enrolled subject, counted from their enrollment date (day 0). Returns the arm, or null for protocols without arms.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "subject_id",
+                    "enrolled_on",
+                    "visits"
+                  ],
+                  "properties": {
+                    "subject_id": {
+                      "type": "string"
+                    },
+                    "arm": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "enrolled_on": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "visits": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "visit",
+                          "date"
+                        ],
+                        "properties": {
+                          "visit": {
+                            "type": "string"
+                          },
+                          "date": {
+                            "type": "string",
+                            "format": "date"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject_id",
+            "in": "path",
+            "required": true,
+            "description": "",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Capability token issued by tpt-soma-admin issue, sent as the bearer value."
+      }
+    },
+    "schemas": {
+      "SampleRecord": {
+        "type": "object",
+        "required": [
+          "sample_id",
+          "source"
+        ],
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "patient_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "source": {
+            "type": "string"
+          },
+          "dataset_provenance": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "VariantRecord": {
+        "type": "object",
+        "required": [
+          "variant_id",
+          "chromosome",
+          "position",
+          "reference",
+          "alternate"
+        ],
+        "properties": {
+          "variant_id": {
+            "type": "string"
+          },
+          "chromosome": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "alternate": {
+            "type": "string"
+          },
+          "rsid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clinvar_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "genotype": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "UmapRecord": {
+        "type": "object",
+        "required": [
+          "sample_id",
+          "cell_id",
+          "umap1",
+          "umap2",
+          "cluster"
+        ],
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cell_id": {
+            "type": "string"
+          },
+          "umap1": {
+            "type": "number"
+          },
+          "umap2": {
+            "type": "number"
+          },
+          "cluster": {
+            "type": "string"
+          }
+        }
+      },
+      "VariantExpressionJoin": {
+        "type": "object",
+        "required": [
+          "variant_id",
+          "cell_id",
+          "gene_id",
+          "count"
+        ],
+        "properties": {
+          "variant_id": {
+            "type": "string"
+          },
+          "chromosome": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "alternate": {
+            "type": "string"
+          },
+          "rsid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cell_id": {
+            "type": "string"
+          },
+          "gene_id": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Error. The body is a plain-text message.",
+        "content": {
+          "text/plain": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Upload rate limit exceeded (10 uploads per minute per subject). Retry-After gives the wait in seconds.",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "text/plain": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

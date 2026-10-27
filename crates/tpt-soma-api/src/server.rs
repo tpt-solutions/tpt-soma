@@ -1,5 +1,6 @@
 use crate::auth::{AuthState, capability_middleware, record_dp_budget_spend, restore_dp_budget};
 use crate::error::{ApiError, Result};
+use crate::rate_limit::{UPLOAD_BURST, UPLOAD_WINDOW, UploadRateLimiter, upload_rate_limit};
 use axum::extract::DefaultBodyLimit;
 
 /// Largest accepted request body. axum 0.8 puts no limit on multipart uploads by
@@ -57,7 +58,9 @@ use tpt_soma_chronos::{
     variability as chronos_variability,
 };
 use tpt_soma_clinica::{
-    ClinicaError, storage as clinica_storage,
+    ClinicaError,
+    protocol::{Arm, ProtocolDesign, Visit, visit_schedule},
+    storage as clinica_storage,
     trial::{AdverseEvent, Criterion, SubjectFeatures},
 };
 use tpt_soma_organon::{
@@ -96,16 +99,28 @@ impl ApiServer {
             object_store: self.object_store.clone(),
         });
 
-        let ingest_router = endpoint::router()
+        // Every multipart upload shares one per-subject rate limit. The limiter
+        // sits inside the capability layer, so it sees the authenticated subject.
+        let upload_limiter = Arc::new(UploadRateLimiter::new(UPLOAD_BURST, UPLOAD_WINDOW));
+        let uploads = Router::new()
+            .route("/api/v1/ingest/organ-csv", post(ingest_organ_csv))
+            .route("/api/v1/ingest/imaging", post(ingest_organ_imaging))
+            .route("/api/v1/ingest/cgm", post(ingest_cgm))
+            .with_state(auth_state.clone())
+            .nest(
+                "/api/v1",
+                endpoint::router().with_state(self.object_store.clone()),
+            )
+            .layer(middleware::from_fn_with_state(
+                upload_limiter,
+                upload_rate_limit,
+            ))
             .layer(middleware::from_fn_with_state(
                 auth_state.clone(),
                 capability_middleware,
-            ))
-            .with_state(self.object_store.clone());
+            ));
 
         let app = Router::new()
-            // Ingest routes
-            .nest("/api/v1", ingest_router)
             // Genomica routes
             .route("/api/v1/variants/:sample_id", get(get_variants))
             .route("/api/v1/variants/:sample_id/:variant_id", get(get_variant))
@@ -135,6 +150,8 @@ impl ApiServer {
                 "/api/v1/cohorts/:cohort_id/aggregate/count",
                 post(cohort_aggregate_count),
             )
+            // DP budget dry run: reports whether an export would fit, spends nothing
+            .route("/api/v1/cohorts/:cohort_id/budget", get(get_cohort_budget))
             // Organon: clinical observation ingestion + trajectories
             .route(
                 "/api/v1/ingest/fhir-observation",
@@ -144,7 +161,6 @@ impl ApiServer {
                 "/api/v1/cohorts/:cohort_id/aggregate/cross-domain",
                 post(cross_domain_aggregate_count),
             )
-            .route("/api/v1/ingest/organ-csv", post(ingest_organ_csv))
             .route(
                 "/api/v1/clinical-observations/:subject_id",
                 get(get_clinical_observations),
@@ -154,7 +170,6 @@ impl ApiServer {
                 get(get_organ_trajectory),
             )
             // Organon: imaging ingestion + listing
-            .route("/api/v1/ingest/imaging", post(ingest_organ_imaging))
             .route("/api/v1/organ-imaging/:subject_id", get(get_organ_imaging))
             // Organon: cross-organ coupling graph
             .route("/api/v1/organ-system-graph", get(get_organ_system_graph))
@@ -163,7 +178,6 @@ impl ApiServer {
                 post(simulate_organ_cascade),
             )
             // Chronos: CGM ingestion + variability
-            .route("/api/v1/ingest/cgm", post(ingest_cgm))
             .route("/api/v1/cgm/:subject_id", get(get_cgm_readings))
             .route(
                 "/api/v1/cgm/:subject_id/variability",
@@ -189,6 +203,10 @@ impl ApiServer {
                 "/api/v1/trials/:trial_id/adverse-events/summary",
                 get(get_trial_ae_summary),
             )
+            .route(
+                "/api/v1/trials/:trial_id/subjects/:subject_id/schedule",
+                get(get_subject_schedule),
+            )
             .route("/api/v1/simulations/:run_id", get(get_simulation))
             .route(
                 "/api/v1/simulations/:run_id/aggregate/count",
@@ -205,7 +223,7 @@ impl ApiServer {
         let public = Router::new()
             .route("/health", get(health_check))
             .route("/metrics", get(metrics_handler));
-        let app = apply_body_limit(app.merge(public), MAX_REQUEST_BODY_BYTES);
+        let app = apply_body_limit(app.merge(uploads).merge(public), MAX_REQUEST_BODY_BYTES);
 
         let listener = tokio::net::TcpListener::bind(self.addr).await?;
         axum::serve(listener, app).await?;
@@ -342,6 +360,34 @@ async fn cohort_aggregate_count(
         "cohort_id": payload.cohort_id,
         "noisy_count": noisy_count,
         "epsilon_spent": sensitivity,
+    })))
+}
+
+#[derive(serde::Deserialize)]
+struct BudgetDryRunQuery {
+    sensitivity: Option<f64>,
+}
+
+#[axum::debug_handler]
+async fn get_cohort_budget(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Path(cohort_id): axum::extract::Path<String>,
+    Query(params): Query<BudgetDryRunQuery>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let sensitivity = params.sensitivity.unwrap_or(1.0);
+    if !(sensitivity.is_finite() && sensitivity > 0.0) {
+        return Err(ApiError::BadRequest(
+            "sensitivity must be a positive, finite number".to_string(),
+        ));
+    }
+
+    let dp = state.dp_service.lock().await;
+    Ok(axum::Json(serde_json::json!({
+        "cohort_id": cohort_id,
+        "epsilon_cap": dp.epsilon_cap(),
+        "remaining_budget": dp.remaining_budget(&cohort_id),
+        "requested_sensitivity": sensitivity,
+        "would_succeed": dp.can_spend(&cohort_id, sensitivity),
     })))
 }
 
@@ -864,10 +910,32 @@ impl CriterionDto {
 }
 
 #[derive(serde::Deserialize)]
+struct ArmDto {
+    name: String,
+    #[serde(default = "default_allocation_ratio")]
+    allocation_ratio: u32,
+}
+
+fn default_allocation_ratio() -> u32 {
+    1
+}
+
+#[derive(serde::Deserialize)]
+struct VisitDto {
+    name: String,
+    /// Days after enrollment. Day 0 is the enrollment day.
+    day: u32,
+}
+
+#[derive(serde::Deserialize)]
 struct CreateTrialRequest {
     trial_name: String,
     cohort_label: String,
     criteria: Vec<CriterionDto>,
+    #[serde(default)]
+    arms: Vec<ArmDto>,
+    #[serde(default)]
+    visits: Vec<VisitDto>,
 }
 
 #[axum::debug_handler]
@@ -880,15 +948,64 @@ async fn create_trial(
         .into_iter()
         .map(CriterionDto::into_criterion)
         .collect::<Result<Vec<_>>>()?;
-    let id = clinica_storage::save_trial_protocol(
+    let design = ProtocolDesign {
+        arms: payload
+            .arms
+            .into_iter()
+            .map(|a| Arm {
+                name: a.name,
+                allocation_ratio: a.allocation_ratio,
+            })
+            .collect(),
+        visits: payload
+            .visits
+            .into_iter()
+            .map(|v| Visit {
+                name: v.name,
+                day: v.day,
+            })
+            .collect(),
+    };
+    let id = clinica_storage::save_trial_protocol_design(
         &state.pool,
         &payload.trial_name,
         &payload.cohort_label,
         &criteria,
+        &design,
     )
     .await
     .map_err(clinica_err)?;
     Ok(axum::Json(serde_json::json!({ "trial_id": id })))
+}
+
+/// Visit dates for one enrolled subject, counted from their enrollment date.
+#[axum::debug_handler]
+async fn get_subject_schedule(
+    axum::extract::State(state): axum::extract::State<Arc<AuthState>>,
+    axum::extract::Path((trial_id, subject_id)): axum::extract::Path<(String, String)>,
+) -> Result<axum::Json<serde_json::Value>> {
+    let trial_id = parse_trial_id(&trial_id)?;
+    let enrollment = clinica_storage::load_subject_enrollment(&state.pool, trial_id, &subject_id)
+        .await
+        .map_err(clinica_err)?
+        .ok_or_else(|| {
+            ApiError::NotFound(format!(
+                "subject {subject_id} is not enrolled in trial {trial_id}"
+            ))
+        })?;
+    let design = clinica_storage::load_trial_design(&state.pool, trial_id)
+        .await
+        .map_err(clinica_err)?;
+    let visits = visit_schedule(&design, enrollment.enrolled_on).map_err(clinica_err)?;
+    Ok(axum::Json(serde_json::json!({
+        "subject_id": subject_id,
+        "arm": enrollment.arm,
+        "enrolled_on": enrollment.enrolled_on,
+        "visits": visits
+            .iter()
+            .map(|(name, date)| serde_json::json!({ "visit": name, "date": date }))
+            .collect::<Vec<_>>(),
+    })))
 }
 
 #[derive(serde::Deserialize)]
@@ -1239,6 +1356,56 @@ mod tests {
         );
     }
 
+    /// Converts axum's `:param` segments to OpenAPI's `{param}`.
+    fn openapi_path(path: &str) -> String {
+        path.split('/')
+            .map(|seg| match seg.strip_prefix(':') {
+                Some(name) => format!("{{{name}}}"),
+                None => seg.to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join("/")
+    }
+
+    /// docs/api/openapi.json must list exactly the (method, path) pairs the
+    /// router registers, so the documented API cannot drift from the real one.
+    #[test]
+    fn openapi_spec_matches_registered_routes() {
+        use std::collections::BTreeSet;
+
+        let mut routes = registered_routes(include_str!("server.rs"), "");
+        routes.extend(registered_routes(
+            include_str!("../../tpt-soma-ingest/src/endpoint.rs"),
+            "/api/v1",
+        ));
+        let registered: BTreeSet<(String, String)> = routes
+            .into_iter()
+            .map(|(method, path)| (method.to_string(), openapi_path(&path)))
+            .collect();
+
+        let spec: serde_json::Value =
+            serde_json::from_str(include_str!("../../../docs/api/openapi.json"))
+                .expect("docs/api/openapi.json must be valid JSON");
+        let documented: BTreeSet<(String, String)> = spec["paths"]
+            .as_object()
+            .expect("spec has a paths object")
+            .iter()
+            .flat_map(|(path, item)| {
+                item.as_object()
+                    .into_iter()
+                    .flatten()
+                    .map(move |(method, _)| (method.to_uppercase(), path.clone()))
+            })
+            .collect();
+
+        let undocumented: Vec<_> = registered.difference(&documented).collect();
+        let stale: Vec<_> = documented.difference(&registered).collect();
+        assert!(
+            undocumented.is_empty() && stale.is_empty(),
+            "undocumented routes: {undocumented:?}; spec entries with no route: {stale:?}"
+        );
+    }
+
     fn upload_request(size: usize) -> Request<Body> {
         let boundary = "tptsomaboundary";
         let mut body = format!(
@@ -1293,5 +1460,205 @@ mod tests {
         let app = apply_body_limit(Router::new().route("/upload", post(upload)), 1024 * 1024);
         let response = app.oneshot(upload_request(512 * 1024)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+}
+
+/// Trial handlers against a real database. The capability layer is left out on
+/// purpose: its policy is covered in `auth.rs`, and these tests target the
+/// handlers' own wiring of request, storage and response.
+#[cfg(test)]
+mod trial_db_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::{get, post};
+    use tower::ServiceExt;
+
+    async fn trial_app() -> std::result::Result<Router, Box<dyn std::error::Error + Send + Sync>> {
+        let pool = tpt_soma_core::test_helpers::test_pool().await?;
+        let state = Arc::new(AuthState {
+            pool: pool.clone(),
+            verifying_key: ed25519_dalek::SigningKey::from_bytes(&[9u8; 32]).verifying_key(),
+            revocation_list: Arc::new(RevocationList::new()),
+            audit_ledger: Arc::new(AuditLedger::new(pool)),
+            dp_service: Arc::new(tokio::sync::Mutex::new(
+                tpt_soma_core::DifferentialPrivacyService::new(1.0),
+            )),
+            object_store: Arc::new(tpt_soma_core::store::ObjectStoreClient::from_env()),
+        });
+        Ok(Router::new()
+            .route("/api/v1/trials", post(create_trial))
+            .route("/api/v1/trials/:trial_id/screen", post(screen_trial))
+            .route(
+                "/api/v1/trials/:trial_id/adverse-events",
+                post(record_trial_adverse_events),
+            )
+            .route(
+                "/api/v1/trials/:trial_id/adverse-events/summary",
+                get(get_trial_ae_summary),
+            )
+            .route(
+                "/api/v1/trials/:trial_id/subjects/:subject_id/schedule",
+                get(get_subject_schedule),
+            )
+            .with_state(state))
+    }
+
+    async fn send(
+        app: &Router,
+        method: &str,
+        uri: &str,
+        body: Option<serde_json::Value>,
+    ) -> (StatusCode, serde_json::Value) {
+        let request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(body.map(|b| b.to_string()).unwrap_or_default()))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+        (status, json)
+    }
+
+    #[tokio::test]
+    #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
+    async fn test_trial_handlers_create_screen_schedule_and_report_ae()
+    -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let app = trial_app().await?;
+        // Unique names per run, so the test never depends on rows left by an earlier run.
+        let run = Uuid::new_v4().simple().to_string();
+
+        let (status, created) = send(
+            &app,
+            "POST",
+            "/api/v1/trials",
+            Some(serde_json::json!({
+                "trial_name": format!("handler-{run}"),
+                "cohort_label": format!("cohort-{run}"),
+                "criteria": [{ "kind": "inclusion", "key": "hba1c", "min": 6.5, "max": 10.0 }],
+                "arms": [
+                    { "name": "treatment", "allocation_ratio": 1 },
+                    { "name": "control", "allocation_ratio": 1 }
+                ],
+                "visits": [
+                    { "name": "baseline", "day": 0 },
+                    { "name": "week4", "day": 28 }
+                ]
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let trial_id = created["trial_id"].as_str().unwrap().to_string();
+
+        // Two eligible subjects fill the target of 2. The third fails the inclusion criterion.
+        let eligible = |id: &str| {
+            serde_json::json!({
+                "subject_id": id,
+                "features": { "hba1c": 7.0 }
+            })
+        };
+        let (status, screened) = send(
+            &app,
+            "POST",
+            &format!("/api/v1/trials/{trial_id}/screen"),
+            Some(serde_json::json!({
+                "candidates": [
+                    eligible(&format!("h1-{run}")),
+                    eligible(&format!("h2-{run}")),
+                    { "subject_id": format!("h3-{run}"), "features": { "hba1c": 4.0 } }
+                ],
+                "target": 2
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(screened["screened"], 3);
+        assert_eq!(screened["enrolled"], 2);
+        assert_eq!(screened["shortfall"], 0);
+
+        // Arms follow the 1:1 cycle in enrollment order.
+        let (status, schedule) = send(
+            &app,
+            "GET",
+            &format!("/api/v1/trials/{trial_id}/subjects/h1-{run}/schedule"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(schedule["arm"], "treatment");
+        let visits = schedule["visits"].as_array().unwrap();
+        assert_eq!(visits.len(), 2);
+        assert_eq!(visits[1]["visit"], "week4");
+
+        let (status, _) = send(
+            &app,
+            "GET",
+            &format!("/api/v1/trials/{trial_id}/subjects/h2-{run}/schedule"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        // The screened-out subject has no enrollment, so there is no schedule.
+        let (status, _) = send(
+            &app,
+            "GET",
+            &format!("/api/v1/trials/{trial_id}/subjects/h3-{run}/schedule"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+
+        let (status, recorded) = send(
+            &app,
+            "POST",
+            &format!("/api/v1/trials/{trial_id}/adverse-events"),
+            Some(serde_json::json!({
+                "events": [{
+                    "subject_id": format!("h1-{run}"),
+                    "term": "nausea",
+                    "grade": 3,
+                    "serious": true
+                }]
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(recorded["recorded"], 1);
+
+        let (status, summary) = send(
+            &app,
+            "GET",
+            &format!("/api/v1/trials/{trial_id}/adverse-events/summary"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(summary["total"], 1);
+        assert_eq!(summary["grade_3_or_higher"], 1);
+        assert_eq!(summary["serious"], 1);
+        assert_eq!(summary["subjects_with_ae"], 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "requires running PostgreSQL database at TEST_DATABASE_URL"]
+    async fn test_trial_handler_rejects_malformed_trial_id()
+    -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let app = trial_app().await?;
+        let (status, _) = send(
+            &app,
+            "GET",
+            "/api/v1/trials/not-a-uuid/adverse-events/summary",
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        Ok(())
     }
 }
