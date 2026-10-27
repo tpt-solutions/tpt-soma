@@ -50,10 +50,14 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(e) => (StatusCode::BAD_REQUEST, e),
             ApiError::Unauthorized(e) => (StatusCode::UNAUTHORIZED, e),
             ApiError::Forbidden(e) => (StatusCode::FORBIDDEN, e),
-            ApiError::DifferentialPrivacy(e) => (
-                StatusCode::FORBIDDEN,
-                format!("Differential privacy error: {}", e),
-            ),
+            ApiError::DifferentialPrivacy(e) => {
+                // A bad request is the caller's fault; an exhausted budget is a policy refusal.
+                let status = match e {
+                    BudgetError::InvalidSensitivity => StatusCode::BAD_REQUEST,
+                    BudgetError::Exhausted => StatusCode::FORBIDDEN,
+                };
+                (status, format!("Differential privacy error: {}", e))
+            }
             ApiError::Io(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("IO error: {}", e),
