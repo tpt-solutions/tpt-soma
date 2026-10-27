@@ -9,6 +9,7 @@
 pub mod biomarker;
 pub mod cohort;
 pub mod error;
+pub mod protocol;
 pub mod stats;
 pub mod storage;
 pub mod trial;
