@@ -36,6 +36,10 @@ before real PHI flows:
       exhaustion verified in staging (see `crates/tpt-soma-core/tests/dp_tests.rs`).
 - [ ] `audit-cli verify-chain` wired into a scheduled job with alerting on
       mismatch (currently a printed diagnostic only — see `integrity.rs`).
+- [ ] Audit ledger reset before the first real record (decision: reset, not
+      re-hash). Rows written before the hash-chain fix cannot be recomputed, and
+      the current rows are development data with no PHI. Record the reset in the
+      ops log with the date and the new chain head.
 
 ## 4. Storage & isolation
 - [ ] Keystone + MinIO provisioned on isolated, access-controlled infra

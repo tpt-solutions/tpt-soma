@@ -207,7 +207,7 @@ Focus: `tpt-soma-pathos` and `tpt-soma-clinica`.
 
 ### Domain modules (`tpt-soma-clinica`)
    - [ ] EHR & FHIR integration hardened beyond Phase 2's subset (full resource coverage as needed) — deferred (Phase 2 subset already in `tpt-soma-organon`; `docs/adr/007-deferred-items-status.md` §2.4)
-   - [ ] Clinical trial design & management: cohort discovery, patient recruitment, protocol design, adverse event tracking — AE summaries, eligibility screening, and persistence done (`storage::save_trial_protocol`, `screen_and_persist`, `record_adverse_events`, `load_ae_summary`; migration 10 adds `trial_enrollments` / `trial_adverse_events`; DB test is `#[ignore]`d). exposed at `POST /api/v1/trials`, `/trials/:id/screen`, `/trials/:id/adverse-events`, `GET /trials/:id/adverse-events/summary` behind the capability/audit choke-point (`clinical_trial` class, per-trial cohort scope; creating a trial needs a `*`-scoped token); handlers have no DB-backed test yet; a richer protocol design model (visits, arms) still open (`docs/adr/007-deferred-items-status.md` §2.4)
+   - [ ] Clinical trial design & management: cohort discovery, patient recruitment, protocol design, adverse event tracking — AE summaries, eligibility screening, and persistence done (`storage::save_trial_protocol`, `screen_and_persist`, `record_adverse_events`, `load_ae_summary`; migration 10 adds `trial_enrollments` / `trial_adverse_events`; DB test is `#[ignore]`d). exposed at `POST /api/v1/trials`, `/trials/:id/screen`, `/trials/:id/adverse-events`, `GET /trials/:id/adverse-events/summary` behind the capability/audit choke-point (`clinical_trial` class, per-trial cohort scope; creating a trial needs a `*`-scoped token); handlers have a DB-backed test (`server.rs::trial_db_tests`, `#[ignore]`, runs in the Keystone CI job when `KEYSTONE_GHCR_TOKEN` is set; not run in this session); protocol design (arms with allocation ratios, visits at day offsets, and a per-subject visit schedule) is done: `protocol.rs`, migration 12, `POST /api/v1/trials` accepts `arms` and `visits`, and `GET /api/v1/trials/:id/subjects/:subject_id/schedule` returns dates. Allocation is deterministic weighted round-robin, **not randomization**; a randomized trial needs its own design and sign-off. Covered by DB tests in `storage.rs` (run against a local PostgreSQL with the trial tables) and the pure tests in `protocol.rs`. The Keystone CI job runs them in full (`docs/adr/007-deferred-items-status.md` §2.4)
 - [x] Biomarker discovery & validation statistical pipelines — `biomarker_discovery` table + `biomarker_discovery` data class seeded (migration 07); statistical pipeline logic deferred
 - [ ] Real-World Evidence (RWE) analytics on observational datasets — deferred
 
@@ -221,7 +221,7 @@ Focus: `tpt-soma-pathos` and `tpt-soma-clinica`.
 ### 3D visualization
 
    - [ ] Three.js/deck.gl whole-body 3D renderer mapped to OSG macro nodes — deferred (`docs/adr/007-deferred-items-status.md` §2.6)
-   - [ ] Interactive systemic query builder for cross-talk simulations — backend done: `POST /api/v1/systemic/query` runs `crosstalk::run_systemic_query` over a supplied OSG topology (computed, not persisted); interactive UI still open (`docs/adr/007-deferred-items-status.md` §2.6)
+   - [x] Interactive systemic query builder for cross-talk simulations — `frontend/src/SystemicQueryPanel.tsx` edits nodes, cross-talk edges, target and solver parameters, then calls `POST /api/v1/systemic/query` (computed, not persisted). Request building and validation are in `frontend/src/systemicQuery.ts` (vitest in `systemicQuery.test.ts`). Its rendering is not checked in a browser (`docs/adr/007-deferred-items-status.md` §2.6)
 
 ### Federated compute
 - [x] Package core ingest+sim stack for on-prem deployment reusing the Helm chart maintained since Phase 0 — the chart already deploys `api`/`flight` (which now include simulacrum/pathos); reuse as-is
@@ -255,7 +255,7 @@ the code. Items marked *open* are not done.
 - [x] DP budget is durable. Each export spends budget, awaits the `dp_budget` ledger row, and only then returns the noisy count (`release_dp_count`). On startup the spent budget is rebuilt from the ledger (`restore_dp_budget`). Test: `test_dp_spend_survives_restart`. The synchronous audit hook is no longer used by the server.
 - [x] Route policy is default-deny. An unlisted route returns 403. `every_registered_route_has_a_policy_entry` scans every route file and fails if one lacks a POLICY entry.
 - [x] `/health` and `/metrics` sit outside the token layer. Before this, Helm's `/health` probes were behind authentication and would have kept pods unready.
-- [ ] *open* Existing ledgers: rows written before this change have hashes that cannot be recomputed, and `dp_budget` rows written before this change use the older `cohort=…:epsilon=…` fingerprint (still parsed). Re-hash or reset the ledger before any real data is loaded. No PHI is loaded yet.
+- [ ] *open* Existing ledgers: rows written before this change have hashes that cannot be recomputed, and `dp_budget` rows written before this change use the older `cohort=…:epsilon=…` fingerprint (still parsed). **Decided: reset the ledger before any real data is loaded** (not re-hash; current rows are dev data with no PHI). Tracked as a step in `docs/runbooks/real-phi-onboarding-gate.md` §3, so it runs at the pilot gate.
 - [x] **verified** DB tests were unrunnable. `test_pool` did not apply migrations, and `run_migrations` read `./migrations` relative to the working directory. Migrations are now embedded with `sqlx::migrate!`, which the container needs because its runtime image has no `WORKDIR`. Verified: the API binary finds its migrations when run from `C:\`.
 - [x] **verified** Tests could wipe a real database. Five DB-backed test helpers fell back to `postgres:postgres@localhost:5432`, while the tests delete rows. `TEST_DATABASE_URL` is now required (`tpt_soma_core::test_helpers::test_database_url`).
 
@@ -266,30 +266,33 @@ the code. Items marked *open* are not done.
 - [x] Frontend lint: ESLint crashed with no config. Added `eslint.config.js` (ESLint 9, typescript-eslint, react-hooks). `react-hooks/set-state-in-effect` is a warning until the data loaders move out of effects (see below).
 - [x] Frontend test: vitest had no tests. Added `src/html.test.ts`.
 - [x] **verified** Stored HTML injection in the UMAP tooltip. `cell_id` and `cluster` from uploaded data were interpolated into tooltip HTML unescaped. They are now escaped with `escapeHtml`.
+- [x] **verified** Trial screening over-enrolled. `screen_and_persist` started its count at zero on every call, so a re-screen could enroll past the trial's target. The target is now the total enrolled count, existing enrollments included. Already-enrolled subjects are not de-enrolled or re-armed by a re-screen, and the trial row is locked during screening. Regression test: `test_rescreen_counts_existing_enrollments_toward_target`.
+- [x] **verified** Negative or non-finite DP sensitivity could refund epsilon. `DifferentialPrivacy::spend_budget` now rejects any amount that is not a positive, finite number (`BudgetError::InvalidSensitivity`, HTTP 400), so every export path is covered. The dry run uses the same rule. Regression test: `invalid_sensitivity_is_rejected_and_never_changes_budget`.
 - [x] **verified** `tpt-soma-capability list-classes` showed only phase 0 classes. All entry points now call `DataClassRegistry::seed_all()`, which replaces the duplicated four-call blocks.
 
 ### C. CI
 - [x] Audit DB job on a Postgres 16 service container: `audit-database` in `.github/workflows/ci.yml`. It runs the audit chain, concurrency and DP-restore tests, single-threaded.
 - [x] Feature job for `tpt-soma-sandbox --features wasmtime-backend` (`sandbox-wasmtime`). Verified locally: 6 tests pass.
-- [ ] *open* Keystone-backed DB job: runs the full `--ignored` suite (cross-phase, OSG, trials, ingest). The image `ghcr.io/tpt-keystone-db/tpt-keystone` is private, and a pull without access returns `denied`. Needs a `KEYSTONE_GHCR_TOKEN` secret. Decision needed.
+- [x] Keystone-backed DB job (`keystone-db` in `.github/workflows/ci.yml`): runs the full `--ignored` suite. **Decided: gate on the secret.** It runs when `KEYSTONE_GHCR_TOKEN` is set, and otherwise prints a notice and passes, so forks and unconfigured repos stay green. Not yet run here, because the image is private.
 - [ ] *open* Re-run the Helm probes against a live API once the stack is available. The `/health` fix is verified by reading the router, not by a live probe.
 
 ### D. Adoption
 - [x] `examples/README.md`: five walkthroughs. Steps 1–2 (build, key, token) were run locally. Steps 3–5 need the Keystone image.
 - [x] Organ-panel CSV template at `docs/templates/organ-function-panel.csv`. `test_organ_function_csv_template_parses` keeps it accepted by the real parser.
-- [x] `CONTRIBUTING.md`. `SECURITY.md` is written, but its reporting contact is a placeholder to fill in.
+- [x] `CONTRIBUTING.md`. `SECURITY.md` now routes reports through GitHub private vulnerability reporting (**decided**; the repo owner must enable it under Settings → Code security).
 - [x] Data-class seeding consolidated (see B).
 - [ ] *open* One-command demo (Compose up, synthetic data, token, sample query). Needs the Keystone image to verify end to end.
-- [ ] *open* Token policy explainer (`tpt-soma-admin explain …`). The policy engine would need a reason-returning variant.
-- [ ] *open* `.gitattributes` (`* text=auto`). `core.autocrlf` is already `true` on this machine. Set the rule after deciding the repo's line-ending policy, because it affects every file.
-- [ ] *open* OpenAPI spec and generated TypeScript client.
-- [ ] *open* Budget dry-run endpoint (`GET /api/v1/cohorts/:id/budget`). Needs a POLICY entry; the coverage test enforces it.
+- [x] Token policy explainer: `tpt-soma-admin explain --token <file> --method <M> --path <P>` prints each policy check with PASS/FAIL and the values compared. `explain_route_policy` returns the reasons, and `enforce_route_policy` is built on it, so the two cannot drift. Policy only: it does not check signature, expiry or revocation. Verified against an issued token.
+- [x] `.gitattributes` with `* text=auto`. **Decided: LF in the repo, CRLF in Windows working copies.** The index is already all LF (`git ls-files --eol`), so no renormalizing commit is needed. `cargo fmt --check` still flags `tpt-soma-capability/src/lib.rs`, which has CRLF in the working copy. Fix with `git add --renormalize` when committing.
+- [x] OpenAPI spec and generated TypeScript client. `docs/api/openapi.json` (35 operations, bearer auth, upload 413/429). `server::tests::openapi_spec_matches_registered_routes` fails on any route missing from the spec or any spec entry with no route. Types are generated into `frontend/src/api/schema.ts` (`npm run gen:api`), and CI fails if they are stale. Response schemas are typed for samples, variants, one variant, UMAP (both), and the join. The other operations are still `object`. App.tsx uses the typed client. `PhysiologyPanel.tsx` and `SimulationPanel.tsx` still use raw `fetch` until their responses have schemas.
+- [x] Budget dry-run endpoint: `GET /api/v1/cohorts/:id/budget?sensitivity=` returns the epsilon cap, remaining budget and `would_succeed`. It spends nothing and writes no audit row. It has a POLICY entry (`read`), and the coverage test passes. `can_spend` covers the logic in `dp_tests.rs`. The handler has no DB-backed test.
 
 ### E. Follow-ups raised while doing the above
-- [ ] *open* Refactor `App.tsx` data loading out of effects (`react-hooks/set-state-in-effect`, currently a warning).
-- [ ] *open* Line endings: `cargo fmt` (`newline_style = "Unix"`) rewrote CRLF to LF in about 50 files that this work did not otherwise change. Content is identical (`git diff --ignore-cr-at-eol` is empty for them). Restore those with `git checkout --` after review, or accept the LF versions.
-- [ ] *open* Disk: C: was at 0 GB free during this work. `target/` alone is about 10 GB. Free space before the next full build.
-- [ ] *open* `Multipart` cap is per request, not per user. A rate limit is still missing.
+- [x] `App.tsx` data loading moved out of effects. The cohort list is initial state (`MOCK_COHORTS`), and samples load from the select's change handler. `eslint src` now reports 0 warnings and 0 errors.
+- [x] Line endings: resolved by the `.gitattributes` decision above (`* text=auto`). `git status` shows no unrelated working-tree changes. Run `git add --renormalize .` when committing if the CRLF working copies need normalizing.
+- [ ] *open* Frontend audit: `npm audit --omit=dev` reports 13 vulnerabilities (4 moderate, 9 high), all in the deck.gl and loaders.gl tree. The non-breaking `npm audit fix` took the count from 14 to 13. The rest need a breaking deck.gl upgrade, so they are not forced here. **Recommendation:** upgrade deck.gl in its own change with a visual check of `UmapViewer.tsx`.
+- [x] Disk: C: was at 0 GB free during this work. It had 37 GB free for the later build and test runs. Keep an eye on it, since `target/` alone is about 10 GB.
+- [x] `Multipart` uploads are rate limited per subject: 10 per minute with a burst of 10 (`rate_limit.rs`). Applies to all four multipart routes. Returns 429 with `Retry-After`. **Limit:** state is in process memory, so with N API replicas each replica enforces its own limit. Move to a shared store (Keystone) before running more than one replica.
 
 ## Cross-phase dependencies
 

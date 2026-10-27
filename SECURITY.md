@@ -7,7 +7,11 @@ seriously.
 
 Do not open a public issue for a security problem.
 
-Report it privately to: **[security contact: to be set by the maintainers]**
+Report it privately through GitHub's private vulnerability reporting: open the
+[Security tab](https://github.com/tpt-solutions/tpt-soma/security) and choose
+"Report a vulnerability". This keeps the report out of public issues and gives
+the maintainers a private thread. (The repository owner must have private
+vulnerability reporting enabled under Settings → Code security.)
 
 Include what you found, the steps to reproduce it, and the commit or version
 affected. You will get an acknowledgement, and a fix will be scheduled before
